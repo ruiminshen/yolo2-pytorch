@@ -52,7 +52,7 @@ and operators to augment images without labels (such as random blur, random satu
 - [x] Processing Video file.
 - [x] Multi-GPU supporting.
 - [ ] Distributed training.
-- [ ] Focal loss.
+- [ ] [Focal loss](https://arxiv.org/abs/1708.02002).
 - [ ] Channel-wise model parameter analyzer and pruner.
 
 ## Quick Start
