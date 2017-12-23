@@ -106,8 +106,8 @@ class Inference(nn.Module):
         ij = torch.autograd.Variable(utils.ensure_device(meshgrid(rows, cols).view(1, -1, 1, 2), device_id))
         center_offset = sigmoid[:, :, :, 1:3]
         center = ij + center_offset
-        anchors = torch.autograd.Variable(utils.ensure_device(self.anchors.view(1, 1, -1, 2), device_id))
         size_norm = _feature[:, :, :, 3:5]
+        anchors = torch.autograd.Variable(utils.ensure_device(self.anchors.view(1, 1, -1, 2), device_id))
         size = torch.exp(size_norm) * anchors
         size2 = size / 2
         yx_min = center - size2
