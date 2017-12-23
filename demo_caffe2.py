@@ -19,8 +19,10 @@ import os
 import argparse
 import configparser
 import logging
+import hashlib
 
-import onnx_caffe2.helper
+from caffe2.proto import caffe2_pb2
+from caffe2.python import workspace
 import cv2
 
 import utils
@@ -40,14 +42,22 @@ def main():
     resize = transform.parse_transform(config, config.get('transform', 'resize_test'))
     transform_image = transform.get_transform(config, config.get('transform', 'image_test').split())
     transform_tensor = transform.get_transform(config, config.get('transform', 'tensor').split())
-    init_net = onnx_caffe2.helper.load_caffe2_net(os.path.join(model_dir, 'init_net.pb'))
-    predict_net = onnx_caffe2.helper.load_caffe2_net(os.path.join(model_dir, 'predict_net.pb'))
+    # load image
     image_bgr = cv2.imread('image.jpg')
     image_resized = resize(image_bgr, height, width)
     image = transform_image(image_resized)
     tensor = transform_tensor(image).unsqueeze(0)
-    _, results = onnx_caffe2.helper.c2_native_run_net(init_net, predict_net, tensor.numpy())
-    print(results)
+    # Caffe2
+    init_net = caffe2_pb2.NetDef()
+    with open(os.path.join(model_dir, 'init_net.pb'), 'rb') as f:
+        init_net.ParseFromString(f.read())
+    predict_net = caffe2_pb2.NetDef()
+    with open(os.path.join(model_dir, 'predict_net.pb'), 'rb') as f:
+        predict_net.ParseFromString(f.read())
+    p = workspace.Predictor(init_net, predict_net)
+    results = p.run([tensor.numpy()])
+    logging.info(utils.abs_mean(results[0]))
+    logging.info(hashlib.md5(results[0].tostring()).hexdigest())
 
 
 def make_args():
