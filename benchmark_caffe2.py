@@ -20,8 +20,6 @@ import argparse
 import configparser
 import logging
 
-import onnx
-import onnx_caffe2.backend
 import onnx_caffe2.helper
 
 import utils
@@ -36,18 +34,17 @@ def main():
     if args.level:
         logging.getLogger().setLevel(args.level.upper())
     model_dir = utils.get_model_dir(config)
-    model = onnx.load(model_dir + '.onnx')
-    onnx.checker.check_model(model)
-    init_net, predict_net = onnx_caffe2.backend.Caffe2Backend.onnx_graph_to_caffe2_net(model.graph, device='CPU')
-    onnx_caffe2.helper.save_caffe2_net(init_net, os.path.join(model_dir, 'init_net.pb'))
-    onnx_caffe2.helper.save_caffe2_net(predict_net, os.path.join(model_dir, 'predict_net.pb'), output_txt=True)
-    logging.info(model_dir)
+    init_net = onnx_caffe2.helper.load_caffe2_net(os.path.join(model_dir, 'init_net.pb'))
+    predict_net = onnx_caffe2.helper.load_caffe2_net(os.path.join(model_dir, 'predict_net.pb'))
+    benchmark = onnx_caffe2.helper.benchmark_caffe2_model(init_net, predict_net)
+    logging.info('benchmark=%f(milliseconds)' % benchmark)
 
 
 def make_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
+    parser.add_argument('-b', '--benchmark', action='store_true')
     parser.add_argument('--level', default='info', help='logging level')
     return parser.parse_args()
 
