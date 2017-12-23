@@ -22,7 +22,6 @@ import logging
 
 import numpy as np
 import nltk.cluster.kmeans
-from PIL import Image
 
 import utils.data
 import utils.iou.numpy
@@ -32,14 +31,9 @@ def distance(a, b):
     return 1 - utils.iou.numpy.iou(-a, a, -b, b)
 
 
-def image_size(path):
-    with Image.open(path) as image:
-        return image.size
-
-
 def get_data(paths):
     dataset = utils.data.Dataset(paths)
-    return np.concatenate([(data['yx_max'] - data['yx_min']) / image_size(data['path']) for data in dataset.dataset])
+    return np.concatenate([(data['yx_max'] - data['yx_min']) / utils.image_size(data['path']) for data in dataset.dataset])
 
 
 def main():
@@ -53,7 +47,10 @@ def main():
     data = get_data(paths)
     logging.info('num_examples=%d' % len(data))
     clusterer = nltk.cluster.kmeans.KMeansClusterer(args.num, distance, args.repeats)
-    clusterer.cluster(data)
+    try:
+        clusterer.cluster(data)
+    except KeyboardInterrupt:
+        logging.warning('interrupted')
     for m in clusterer.means():
         print('\t'.join(map(str, m)))
 
@@ -61,7 +58,7 @@ def main():
 def make_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('num', type=int)
-    parser.add_argument('-r', '--repeats', type=int, default=300)
+    parser.add_argument('-r', '--repeats', type=int, default=np.iinfo(np.int).max)
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-p', '--phase', nargs='+', default=['train', 'val', 'test'])
     parser.add_argument('--level', default='info', help='logging level')

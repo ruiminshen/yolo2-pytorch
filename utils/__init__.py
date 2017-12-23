@@ -23,6 +23,7 @@ import importlib
 import numpy as np
 import pandas as pd
 import torch.autograd
+from PIL import Image
 
 
 class Compose(object):
@@ -113,3 +114,8 @@ def ensure_device(t, device_id=None, async=False):
 def abs_mean(data, dtype=np.float32):
     assert isinstance(data, np.ndarray)
     return np.sum(np.abs(data)) / dtype(data.size)
+
+
+def image_size(path):
+    with Image.open(path) as image:
+        return image.size
