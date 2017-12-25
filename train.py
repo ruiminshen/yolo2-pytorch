@@ -71,7 +71,7 @@ def ensure_model(model):
 class SummaryWorker(threading.Thread):
     def __init__(self, env):
         super(SummaryWorker, self).__init__()
-        self.env = env
+        self.config = env.config
         self.running = True
         self.queue = queue.Queue()
         self.writer = SummaryWriter(os.path.join(env.model_dir, env.args.run))
@@ -105,7 +105,10 @@ class SummaryWorker(threading.Thread):
     def run(self):
         while self.running:
             func, kwargs = self.queue.get()
-            func(**kwargs)
+            try:
+                func(**kwargs)
+            except Exception as e:
+                logging.error(e)
 
     def copy_scalar(self, **kwargs):
         step, loss_total, loss, loss_hparam = (kwargs[key] for key in 'step, loss_total, loss, loss_hparam'.split(', '))
@@ -122,7 +125,7 @@ class SummaryWorker(threading.Thread):
         step, loss_total, loss, loss_hparam = (kwargs[key] for key in 'step, loss_total, loss, loss_hparam'.split(', '))
         for key in loss:
             self.writer.add_scalar('loss/' + key, loss[key][0], step)
-        if self.env.config.getboolean('summary_scalar', 'loss_hparam'):
+        if self.config.getboolean('summary_scalar', 'loss_hparam'):
             self.writer.add_scalars('loss_hparam', {key: loss_hparam[key][0] for key in loss_hparam}, step)
         self.writer.add_scalar('loss_total', loss_total[0], step)
 
@@ -141,7 +144,7 @@ class SummaryWorker(threading.Thread):
     def summary_image(self, **kwargs):
         step, height, width, rows, cols, data, pred, matching = (kwargs[key] for key in 'step, height, width, rows, cols, data, pred, matching'.split(', '))
         image = data['image']
-        limit = min(self.env.config.getint('summary_image', 'limit'), image.shape[0])
+        limit = min(self.config.getint('summary_image', 'limit'), image.shape[0])
         image = image[:limit, :, :, :]
         yx_min, yx_max, iou = (pred[key] for key in 'yx_min, yx_max, iou'.split(', '))
         scale = [height / rows, width / cols]
@@ -150,7 +153,7 @@ class SummaryWorker(threading.Thread):
             cls = np.argmax(F.softmax(torch.autograd.Variable(torch.from_numpy(pred['logits'])), -1).data.cpu().numpy(), -1)
         else:
             cls = np.zeros(iou.shape, np.int)
-        if self.env.config.getboolean('summary_image', 'bbox'):
+        if self.config.getboolean('summary_image', 'bbox'):
             # data
             canvas = np.copy(image)
             canvas = pybenchmark.profile('bbox/data')(self.draw_bbox_data)(canvas, *(data[key] for key in 'yx_min, yx_max, cls'.split(', ')))
@@ -159,7 +162,7 @@ class SummaryWorker(threading.Thread):
             canvas = np.copy(image)
             canvas = pybenchmark.profile('bbox/pred')(self.draw_bbox_pred)(canvas, yx_min, yx_max, cls, iou, nms=True)
             self.writer.add_image('bbox/pred', torchvision.utils.make_grid(torch.from_numpy(np.stack(canvas)).permute(0, 3, 1, 2).float(), normalize=True, scale_each=True), step)
-        if self.env.config.getboolean('summary_image', 'iou'):
+        if self.config.getboolean('summary_image', 'iou'):
             # bbox
             canvas = np.copy(image)
             canvas_data = self.draw_bbox_data(canvas, *(data[key] for key in 'yx_min, yx_max, cls'.split(', ')), colors=['g'])
@@ -185,13 +188,13 @@ class SummaryWorker(threading.Thread):
 
     def draw_bbox_pred(self, canvas, yx_min, yx_max, cls, iou, colors=None, nms=False):
         batch_size = len(canvas)
-        mask = iou > self.env.config.getfloat('detect', 'threshold')
+        mask = iou > self.config.getfloat('detect', 'threshold')
         yx_min, yx_max = (np.reshape(a, [a.shape[0], -1, 2]) for a in (yx_min, yx_max))
         cls, iou, mask = (np.reshape(a, [a.shape[0], -1]) for a in (cls, iou, mask))
         yx_min, yx_max, cls, iou, mask = ([a[b] for b in range(batch_size)] for a in (yx_min, yx_max, cls, iou, mask))
         yx_min, yx_max, cls, iou = ([a[m] for a, m in zip(l, mask)] for l in (yx_min, yx_max, cls, iou))
         if nms:
-            overlap = self.env.config.getfloat('detect', 'overlap')
+            overlap = self.config.getfloat('detect', 'overlap')
             keep = [pybenchmark.profile('nms')(utils.postprocess.nms)(torch.Tensor(yx_min), torch.Tensor(yx_max), torch.Tensor(iou), overlap) if iou.shape[0] > 0 else [] for yx_min, yx_max, iou in zip(yx_min, yx_max, iou)]
             keep = [np.array(k, np.int) for k in keep]
             yx_min, yx_max, cls = ([a[k] for a, k in zip(l, keep)] for l in (yx_min, yx_max, cls))
@@ -203,7 +206,7 @@ class SummaryWorker(threading.Thread):
         cls, iou = ([np.squeeze(a, -1) for a in np.split(a, a.shape[-1], -1)] for a in (cls, iou))
         results = []
         for i, (yx_min, yx_max, cls, iou) in enumerate(zip(yx_min, yx_max, cls, iou)):
-            mask = iou > self.env.config.getfloat('detect', 'threshold')
+            mask = iou > self.config.getfloat('detect', 'threshold')
             yx_min, yx_max = (np.reshape(a, [a.shape[0], -1, 2]) for a in (yx_min, yx_max))
             cls, iou, mask = (np.reshape(a, [a.shape[0], -1]) for a in (cls, iou, mask))
             yx_min, yx_max, cls, iou, mask = ([a[b] for b in range(batch_size)] for a in (yx_min, yx_max, cls, iou, mask))
@@ -336,11 +339,11 @@ class Train(object):
             inference = ensure_model(inference)
             inference.train()
             optimizer = utils.train.get_optimizer(self.config, self.args.optimizer)(dnn.parameters(), self.args.learning_rate)
-            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.1)
+            #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.1)
             try:
                 for epoch in range(0 if epoch is None else epoch, self.args.epoch):
-                    scheduler.step(epoch)
-                    for data in tqdm.tqdm(loader, desc='epoch=%d/%d' % (epoch, self.args.epoch)) if self.args.progress else loader:
+                    #scheduler.step(epoch)
+                    for data in loader if self.args.quiet else tqdm.tqdm(loader, desc='epoch=%d/%d' % (epoch, self.args.epoch)):
                         kwargs = self.step(inference, optimizer, data)
                         step += 1
                         kwargs = {**kwargs, **dict(
@@ -362,7 +365,8 @@ class Train(object):
                 with open(os.path.join(self.model_dir, 'data.pkl'), 'wb') as f:
                     pickle.dump(data, f)
                 raise
-        self.stop()
+            finally:
+                self.stop()
 
     def dump_object(self, **kwargs):
         return dict(dnn=kwargs['dnn'].state_dict(), optimizer=kwargs['optimizer'].state_dict())
@@ -425,7 +429,7 @@ def make_args():
     parser.add_argument('-lr', '--learning_rate', default=1e-6, type=float, help='learning rate')
     parser.add_argument('-e', '--epoch', type=int, default=np.iinfo(np.int).max)
     parser.add_argument('-d', '--delete', action='store_true', help='delete model')
-    parser.add_argument('-p', '--progress', action='store_true', help='show progress')
+    parser.add_argument('-q', '--quiet', action='store_true', help='quiet mode')
     parser.add_argument('-r', '--run', default=time.strftime('%Y-%m-%d_%H-%M-%S'), help='the run name in TensorBoard')
     parser.add_argument('--level', default='info', help='logging level')
     return parser.parse_args()
