@@ -15,6 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+import inflection
 import cv2
 
 
@@ -23,5 +24,8 @@ def naive(image, height, width):
 
 
 class Naive(object):
+    def __init__(self):
+        self.fn = eval(inflection.underscore(type(self).__name__))
+
     def __call__(self, image, height, width):
-        return naive(image, height, width)
+        return self.fn(image, height, width)

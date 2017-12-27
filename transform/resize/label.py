@@ -17,6 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import inspect
 
+import inflection
 import numpy as np
 import cv2
 
@@ -28,8 +29,11 @@ def naive(image, yx_min, yx_max, height, width):
 
 
 class Naive(object):
+    def __init__(self):
+        self.fn = eval(inflection.underscore(type(self).__name__))
+
     def __call__(self, data, height, width):
-        data['image'], data['yx_min'], data['yx_max'] = naive(data['image'], data['yx_min'], data['yx_max'], height, width)
+        data['image'], data['yx_min'], data['yx_max'] = self.fn(data['image'], data['yx_min'], data['yx_max'], height, width)
         return data
 
 
@@ -55,7 +59,8 @@ def random_crop(config, image, yx_min, yx_max, height, width):
 class RandomCrop(object):
     def __init__(self, config):
         self.config = config
+        self.fn = eval(inflection.underscore(type(self).__name__))
 
     def __call__(self, data, height, width):
-        data['image'], data['yx_min'], data['yx_max'] = random_crop(self.config, data['image'], data['yx_min'], data['yx_max'], height, width)
+        data['image'], data['yx_min'], data['yx_max'] = self.fn(self.config, data['image'], data['yx_min'], data['yx_max'], height, width)
         return data

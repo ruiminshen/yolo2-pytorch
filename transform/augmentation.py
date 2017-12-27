@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import inspect
 import random
 
+import inflection
 import numpy as np
 import cv2
 
@@ -77,9 +78,10 @@ def random_rotate(config, image, yx_min, yx_max):
 class RandomRotate(object):
     def __init__(self, config):
         self.config = config
+        self.fn = eval(inflection.underscore(type(self).__name__))
 
     def __call__(self, data):
-        data['image'], data['yx_min'], data['yx_max'] = random_rotate(self.config, data['image'], data['yx_min'], data['yx_max'])
+        data['image'], data['yx_min'], data['yx_max'] = self.fn(self.config, data['image'], data['yx_min'], data['yx_max'])
         return data
 
 
@@ -104,9 +106,10 @@ def random_flip_horizontally(config, image, yx_min, yx_max):
 class RandomFlipHorizontally(object):
     def __init__(self, config):
         self.config = config
+        self.fn = eval(inflection.underscore(type(self).__name__))
 
     def __call__(self, data):
-        data['image'], data['yx_min'], data['yx_max'] = random_flip_horizontally(self.config, data['image'], data['yx_min'], data['yx_max'])
+        data['image'], data['yx_min'], data['yx_max'] = self.fn(self.config, data['image'], data['yx_min'], data['yx_max'])
         return data
 
 
