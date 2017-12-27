@@ -26,9 +26,21 @@ import torch
 def get_optimizer(config, name):
     section = 'optimizer_' + name
     return {
-        'sgd': lambda params, lr: torch.optim.SGD(params, lr, momentum=config.getfloat(section, 'momentum')),
-        'adam': lambda params, lr: torch.optim.Adam(params, lr, betas=tuple(map(float, config.get(section, 'betas').split())), eps=config.getfloat(section, 'eps')),
-        'rmsprop': lambda params, lr: torch.optim.RMSprop(params, lr, alpha=config.getfloat(section, 'alpha'), eps=config.getfloat(section, 'eps')),
+        'sgd': lambda params, lr: torch.optim.SGD(
+            params,
+            lr, weight_decay=config.getfloat('optimizer', 'weight_decay'),
+            momentum=config.getfloat(section, 'momentum'),
+        ),
+        'adam': lambda params, lr: torch.optim.Adam(
+            params,
+            lr, weight_decay=config.getfloat('optimizer', 'weight_decay'),
+            betas=tuple(map(float, config.get(section, 'betas').split())), eps=config.getfloat(section, 'eps'),
+        ),
+        'rmsprop': lambda params, lr: torch.optim.RMSprop(
+            params,
+            lr, weight_decay=config.getfloat('optimizer', 'weight_decay'),
+            alpha=config.getfloat(section, 'alpha'), eps=config.getfloat(section, 'eps'),
+        ),
     }[name]
 
 
