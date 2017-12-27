@@ -396,8 +396,8 @@ class Train(object):
             e = _eval.Eval(self.args, self.config)
             cls_ap = e()
             for c in cls_ap:
-                self.writer.add_scalar('ap/' + self.category[c], cls_ap[c], step)
-            self.writer.add_scalar('mean_ap', np.mean(list(cls_ap.values())), step)
+                self.summary_worker.writer.add_scalar('ap/' + self.category[c], cls_ap[c], step)
+            self.summary_worker.writer.add_scalar('mean_ap', np.mean(list(cls_ap.values())), step)
         except Exception as e:
             logging.warning(e)
         if torch.cuda.is_available():
