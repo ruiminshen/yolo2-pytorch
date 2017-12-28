@@ -100,4 +100,6 @@ class RandomGamma(object):
 
 class Normalize(torchvision.transforms.Normalize):
     def __init__(self, config):
-        torchvision.transforms.Normalize.__init__(self, (0.5, 0.5, 0.5), (1, 1, 1))
+        name = inflection.underscore(type(self).__name__)
+        mean, std = tuple(map(float, config.get('transform', name).split()))
+        torchvision.transforms.Normalize.__init__(self, (mean, mean, mean), (std, std, std))
