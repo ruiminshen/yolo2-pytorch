@@ -112,7 +112,7 @@ def ensure_device(t, device_id=None, async=False):
 
 
 def abs_mean(data, dtype=np.float32):
-    assert isinstance(data, np.ndarray)
+    assert isinstance(data, np.ndarray), type(data)
     return np.sum(np.abs(data)) / dtype(data.size)
 
 
