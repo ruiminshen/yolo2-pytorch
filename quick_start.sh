@@ -41,7 +41,7 @@ tiny-yolo-voc
 for MODEL in $MODELS
 do
 	wget http://pjreddie.com/media/files/$MODEL.weights -nc -P ~/model/darknet
-	python3 parse_darknet.py ~/model/darknet/$MODEL.weights -c config.ini config/darknet/$MODEL.ini -d
+	python3 convert_darknet_model.py ~/model/darknet/$MODEL.weights -c config.ini config/darknet/$MODEL.ini -d
 	python3 eval.py -c config.ini config/darknet/$MODEL.ini -m cache/name=cache_20
 	python3 detect.py -c config.ini config/darknet/$MODEL.ini -i image.jpg --pause
 done
@@ -56,7 +56,7 @@ yolo
 for MODEL in $MODELS
 do
 	wget http://pjreddie.com/media/files/$MODEL.weights -nc -P ~/model/darknet
-	python3 parse_darknet.py ~/model/darknet/$MODEL.weights -c config.ini config/darknet/$MODEL.ini -d
+	python3 convert_darknet_model.py ~/model/darknet/$MODEL.weights -c config.ini config/darknet/$MODEL.ini -d
 	python3 eval.py -c config.ini config/darknet/$MODEL.ini -m cache/name=cache_80
 	python3 detect.py -c config.ini config/darknet/$MODEL.ini -i image.jpg --pause
 done
