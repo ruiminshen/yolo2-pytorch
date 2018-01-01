@@ -1,8 +1,8 @@
 # PyTorch implementation of the [YOLO (You Only Look Once) v2](https://arxiv.org/pdf/1612.08242.pdf)
 
 The YOLOv2 is one of the most popular [one-stage](https://arxiv.org/abs/1708.02002) object detector.
-This project adopts [PyTorch](http://pytorch.org/) as the developing framework to increase productivity, and utilize [ONNX](https://github.com/onnx/onnx) to convert models into [Caffe 2](https://caffe2.ai/) to benifit engineering deployment.
-If you are benifited from this project, a donation will be appreciated (via [PayPal](https://www.paypal.me/minimumshen), [微信支付](donate_mm.jpg) or [支付宝](donate_alipay.jpg)).
+This project adopts [PyTorch](http://pytorch.org/) as the developing framework to increase productivity, and utilize [ONNX](https://github.com/onnx/onnx) to convert models into [Caffe 2](https://caffe2.ai/) to benefit engineering deployment.
+If you are benefited from this project, a donation will be appreciated (via [PayPal](https://www.paypal.me/minimumshen), [微信支付](donate_mm.jpg) or [支付宝](donate_alipay.jpg)).
 
 ## Designs
 
