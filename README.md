@@ -63,7 +63,7 @@ This project uses [Python 3](https://www.python.org/). To install the dependent 
 sudo pip3 install -r requirements.txt
 ```
 
-`quick_start.sh` containes the examples to perform detection and evaluation. Run this script.
+`quick_start.sh` contains the examples to perform detection and evaluation. Run this script.
 Multiple datasets and models (the original Darknet's format, will be converted into PyTorch's format) will be downloaded.
 These datasets are cached into different data profiles, and the models are evaluated over the cached data.
 The models are used to detect objects in an example image, and the detection results will be shown.
