@@ -48,6 +48,10 @@ def abs_mean(name, variable):
     return np.mean(np.abs(variable.numpy()))
 
 
+def min_abs_mean(name, variable):
+    return np.min([np.mean(np.abs(a)) for a in variable.numpy()])
+
+
 def main():
     args = make_args()
     config = configparser.ConfigParser()
