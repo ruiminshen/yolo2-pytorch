@@ -24,5 +24,5 @@ darknet19_448.conv.23
 for MODEL in $MODELS
 do
 	wget http://pjreddie.com/media/files/$MODEL.weights -nc -P ~/model/darknet
-	python3 convert_darknet_model.py ~/model/darknet/$MODEL.weights -c config.ini config/darknet.ini -d
+	python3 convert_darknet_torch.py ~/model/darknet/$MODEL.weights -c config.ini config/darknet.ini -d
 done
