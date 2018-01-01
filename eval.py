@@ -287,7 +287,7 @@ class Eval(object):
     def save_db(self, cls_ap):
         path = utils.get_eval_db(self.config)
         with tinydb.TinyDB(path) as db:
-            row = dict([(name, fn(self, cls_ap=cls_ap)) for name, fn in self.mapper])
+            row = dict([(key, fn(self, cls_ap=cls_ap)) for key, fn in self.mapper])
             db.insert(row)
 
     def save_tsv(self):
