@@ -57,7 +57,7 @@ class Timer(object):
 
     def __call__(self):
         """
-        Return a boolean value to indicate if the time event is occured.
+        Return a boolean value to indicate if the time event is occurred.
         :author 申瑞珉 (Ruimin Shen)
         """
         t = time.time()
