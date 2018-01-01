@@ -19,7 +19,6 @@ import os
 import argparse
 import configparser
 import datetime
-import importlib
 import json
 import logging
 import multiprocessing
@@ -114,20 +113,6 @@ def average_precision(config, tp, num, dtype=np.float):
     return voc_ap(rec, prec, config.getboolean('eval', 'metric07'))
 
 
-def load_mapper(f):
-    mapper = []
-    for line in f:
-        line = line.strip()
-        if not line or line.startswith('#'):
-            continue
-        if line.startswith('import '):
-            key = line[7:].lstrip()
-            globals()[key] = importlib.import_module(key)
-        else:
-            mapper.append(eval(line.rstrip()))
-    return mapper
-
-
 def norm_bbox(data, pred, keys='yx_min, yx_max'):
     size, image = (data[key] for key in 'size, image'.split(', '))
     _size = size.float()
@@ -202,6 +187,7 @@ class Eval(object):
         else:
             logging.warning('training config (%s) not found' % path)
         self.now = datetime.datetime.now()
+        self.mapper = utils.load_functions(self.config.get('eval', 'mapper'))
 
     def get_loader(self):
         paths = [os.path.join(self.cache_dir, phase + '.pkl') for phase in self.config.get('eval', 'phase').split()]
@@ -299,11 +285,9 @@ class Eval(object):
         return cls_ap
 
     def save_db(self, cls_ap):
-        with open(self.config.get('eval', 'mapper'), 'r') as f:
-            mapper = load_mapper(f)
         path = utils.get_eval_db(self.config)
         with tinydb.TinyDB(path) as db:
-            row = dict([fn(self, cls_ap) for fn in mapper])
+            row = dict([(name, fn(self, cls_ap=cls_ap)) for name, fn in self.mapper])
             db.insert(row)
 
     def save_tsv(self):

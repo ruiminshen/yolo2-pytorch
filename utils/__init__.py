@@ -19,6 +19,7 @@ import os
 import re
 import configparser
 import importlib
+import inspect
 
 import numpy as np
 import pandas as pd
@@ -119,3 +120,8 @@ def abs_mean(data, dtype=np.float32):
 def image_size(path):
     with Image.open(path) as image:
         return image.size
+
+
+def load_functions(path):
+    module = importlib.machinery.SourceFileLoader('importer', path).load_module()
+    return [(name, fn) for name, fn in inspect.getmembers(module) if inspect.isfunction(fn)]
