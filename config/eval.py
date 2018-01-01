@@ -17,7 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 
-import numpy
+import numpy as np
 import humanize
 import pybenchmark
 
@@ -83,7 +83,7 @@ def eval_iou(env, **kwargs):
 
 
 def eval_mean_ap(env, **kwargs):
-    return numpy.mean(list(kwargs['cls_ap'].values()))
+    return np.mean(list(kwargs['cls_ap'].values()))
 
 
 def eval_ap(env, **kwargs):
