@@ -122,8 +122,6 @@ def image_size(path):
         return image.size
 
 
-def load_functions(path, name=None):
-    if name is None:
-        name = os.path.basename(os.path.splitext(path)[0])
+def load_functions(path, name=''):
     module = importlib.machinery.SourceFileLoader(name, path).load_module()
     return [(name, fn) for name, fn in inspect.getmembers(module) if inspect.isfunction(fn)]
