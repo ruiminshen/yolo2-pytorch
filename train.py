@@ -27,6 +27,7 @@ import shutil
 import time
 import subprocess
 import pickle
+import traceback
 
 import filelock
 import humanize
@@ -99,8 +100,9 @@ class SummaryWorker(threading.Thread):
             self.queue.put((func, kwargs))
 
     def stop(self):
-        self.running = False
-        self.queue.put((lambda **kwargs: None, {}))
+        if self.running:
+            self.running = False
+            self.queue.put((lambda **kwargs: None, {}))
 
     def run(self):
         while self.running:
@@ -290,10 +292,11 @@ class Train(object):
         except ValueError:
             step, epoch = 0, 0
         if self.args.finetune:
-            if os.path.isdir(self.args.finetune):
-                checkpoint, _step, _epoch = utils.train.load_model(self.args.finetune)
+            path = os.path.expanduser(os.path.expandvars(self.args.finetune))
+            if os.path.isdir(path):
+                checkpoint, _step, _epoch = utils.train.load_model(path)
             else:
-                checkpoint = torch.load(self.args.finetune, map_location=lambda storage, loc: storage)
+                checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
             state_dict = dnn.state_dict()
             ignore = utils.RegexList(self.args.ignore)
             finetune = [(k, v) for k, v in checkpoint['dnn'].items() if k in state_dict and not ignore(k) and v.size() == state_dict[k].size()]
@@ -331,18 +334,18 @@ class Train(object):
 
     def __call__(self):
         with filelock.FileLock(os.path.join(self.model_dir, 'lock'), 0):
-            loader = self.get_loader()
-            dnn = utils.parse_attr(self.config.get('model', 'dnn'))(self.config, self.anchors, len(self.category))
-            inference = model.Inference(self.config, dnn, self.anchors)
-            logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in inference.state_dict().values())))
-            step, epoch = self.restore(dnn)
-            inference = ensure_model(inference)
-            inference.train()
-            optimizer = utils.train.get_optimizer(self.config, self.args.optimizer)(dnn.parameters(), self.args.learning_rate)
-            #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.1)
             try:
+                loader = self.get_loader()
+                dnn = utils.parse_attr(self.config.get('model', 'dnn'))(self.config, self.anchors, len(self.category))
+                inference = model.Inference(self.config, dnn, self.anchors)
+                logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in inference.state_dict().values())))
+                step, epoch = self.restore(dnn)
+                inference = ensure_model(inference)
+                inference.train()
+                optimizer = utils.train.get_optimizer(self.config, self.args.optimizer)(dnn.parameters(), self.args.learning_rate)
+                scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.1)
                 for epoch in range(0 if epoch is None else epoch, self.args.epoch):
-                    #scheduler.step(epoch)
+                    scheduler.step(epoch)
                     for data in loader if self.args.quiet else tqdm.tqdm(loader, desc='epoch=%d/%d' % (epoch, self.args.epoch)):
                         kwargs = self.step(inference, optimizer, data)
                         step += 1
@@ -362,6 +365,7 @@ class Train(object):
                 logging.warning('interrupted')
                 self.save(**kwargs)
             except:
+                traceback.print_exc()
                 with open(os.path.join(self.model_dir, 'data.pkl'), 'wb') as f:
                     pickle.dump(data, f)
                 raise
@@ -424,7 +428,7 @@ def make_args():
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
     parser.add_argument('-b', '--batch_size', default=16, type=int, help='batch size')
     parser.add_argument('-f', '--finetune')
-    parser.add_argument('-i', '--ignore', nargs='+', help='regex to ignore weights while fintuning')
+    parser.add_argument('-i', '--ignore', nargs='+', default=[], help='regex to ignore weights while fintuning')
     parser.add_argument('-o', '--optimizer', default='adam')
     parser.add_argument('-lr', '--learning_rate', default=1e-6, type=float, help='learning rate')
     parser.add_argument('-e', '--epoch', type=int, default=np.iinfo(np.int).max)
