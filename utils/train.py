@@ -92,7 +92,9 @@ def load_model(model_dir, step=None, ext='.pth', ext_epoch='.epoch', map_locatio
             epoch = int(f.read())
     except (FileNotFoundError, ValueError):
         epoch = None
-    return torch.load(path + ext, map_location=map_location), step, epoch
+    _path = path + ext
+    assert os.path.exists(_path), _path
+    return torch.load(_path, map_location=map_location), step, epoch
 
 
 class Saver(object):
