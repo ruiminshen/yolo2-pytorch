@@ -20,6 +20,8 @@ import torch.nn as nn
 
 import model
 
+count_include_pad = False
+
 
 class BasicConv2d(nn.Module):
     def __init__(self, in_planes, out_planes, kernel_size, stride, padding=0):
@@ -101,7 +103,7 @@ class Inception_A(nn.Module):
         )
 
         self.block3 = nn.Sequential(
-            nn.AvgPool2d(3, stride=1, padding=1, count_include_pad=False),
+            nn.AvgPool2d(3, stride=1, padding=1, count_include_pad=count_include_pad),
             BasicConv2d(384, 96, kernel_size=1, stride=1)
         )
 
@@ -155,7 +157,7 @@ class Inception_B(nn.Module):
         )
 
         self.block3 = nn.Sequential(
-            nn.AvgPool2d(3, stride=1, padding=1, count_include_pad=False),
+            nn.AvgPool2d(3, stride=1, padding=1, count_include_pad=count_include_pad),
             BasicConv2d(1024, 128, kernel_size=1, stride=1)
         )
 
@@ -210,7 +212,7 @@ class Inception_C(nn.Module):
         self.block2_3b = BasicConv2d(512, 256, kernel_size=(3, 1), stride=1, padding=(1, 0))
 
         self.block3 = nn.Sequential(
-            nn.AvgPool2d(3, stride=1, padding=1, count_include_pad=False),
+            nn.AvgPool2d(3, stride=1, padding=1, count_include_pad=count_include_pad),
             BasicConv2d(1536, 256, kernel_size=1, stride=1)
         )
 
