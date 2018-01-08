@@ -19,6 +19,7 @@ import sys
 import argparse
 import configparser
 import logging
+import logging.config
 import threading
 import multiprocessing
 import queue
@@ -29,10 +30,8 @@ import subprocess
 import pickle
 import traceback
 
-import filelock
-import humanize
+import yaml
 import numpy as np
-import pybenchmark
 import torch.autograd
 import torch.cuda
 import torch.nn as nn
@@ -41,6 +40,9 @@ import torch.utils.data
 import torch.nn.functional as F
 import torchvision.transforms
 import tqdm
+import humanize
+import pybenchmark
+import filelock
 from tensorboardX import SummaryWriter
 
 import model
@@ -109,8 +111,8 @@ class SummaryWorker(threading.Thread):
             func, kwargs = self.queue.get()
             try:
                 func(**kwargs)
-            except Exception as e:
-                logging.error(e)
+            except:
+                traceback.print_exc()
 
     def copy_scalar(self, **kwargs):
         step, loss_total, loss, loss_hparam = (kwargs[key] for key in 'step, loss_total, loss, loss_hparam'.split(', '))
@@ -287,16 +289,16 @@ class Train(object):
 
     def restore(self, dnn):
         try:
-            checkpoint, step, epoch = utils.train.load_model(self.model_dir)
+            path, step, epoch = utils.train.load_model(self.model_dir)
+            checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
             dnn.load_state_dict(checkpoint['dnn'])
         except ValueError:
             step, epoch = 0, 0
         if self.args.finetune:
             path = os.path.expanduser(os.path.expandvars(self.args.finetune))
             if os.path.isdir(path):
-                checkpoint, _step, _epoch = utils.train.load_model(path)
-            else:
-                checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
+                path, _step, _epoch = utils.train.load_model(path)
+            checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
             state_dict = dnn.state_dict()
             ignore = utils.RegexList(self.args.ignore)
             finetune = [(k, v) for k, v in checkpoint['dnn'].items() if k in state_dict and not ignore(k) and v.size() == state_dict[k].size()]
@@ -342,7 +344,7 @@ class Train(object):
                 step, epoch = self.restore(dnn)
                 inference = ensure_model(inference)
                 inference.train()
-                optimizer = utils.train.get_optimizer(self.config, self.args.optimizer)(dnn.parameters(), self.args.learning_rate)
+                optimizer = utils.train.get_optimizer(self.config, self.args.optimizer)(filter(lambda p: p.requires_grad, inference.parameters()), self.args.learning_rate)
                 scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.1)
                 for epoch in range(0 if epoch is None else epoch, self.args.epoch):
                     scheduler.step(epoch)
@@ -414,8 +416,8 @@ def main():
     utils.load_config(config, args.config)
     for cmd in args.modify:
         utils.modify_config(config, cmd)
-    if args.level:
-        logging.getLogger().setLevel(args.level.upper())
+    with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
+        logging.config.dictConfig(yaml.load(f))
     logging.info('cd ' + os.getcwd() + ' && ' + subprocess.list2cmdline([sys.executable] + sys.argv))
     train = Train(args, config)
     train()
@@ -435,7 +437,7 @@ def make_args():
     parser.add_argument('-d', '--delete', action='store_true', help='delete model')
     parser.add_argument('-q', '--quiet', action='store_true', help='quiet mode')
     parser.add_argument('-r', '--run', default=time.strftime('%Y-%m-%d_%H-%M-%S'), help='the run name in TensorBoard')
-    parser.add_argument('--level', default='info', help='logging level')
+    parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
 
 

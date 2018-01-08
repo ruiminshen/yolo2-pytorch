@@ -15,13 +15,17 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+import os
 import argparse
 import configparser
 import logging
+import logging.config
 import inspect
 import operator
 
+import yaml
 import numpy as np
+import torch
 import humanize
 
 import utils
@@ -58,10 +62,11 @@ def main():
     utils.load_config(config, args.config)
     for cmd in args.modify:
         utils.modify_config(config, cmd)
-    if args.level:
-        logging.getLogger().setLevel(args.level.upper())
+    with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
+        logging.config.dictConfig(yaml.load(f))
     model_dir = utils.get_model_dir(config)
-    checkpoint, step, epoch = utils.train.load_model(model_dir)
+    path, step, epoch = utils.train.load_model(model_dir)
+    checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
     state_dict = checkpoint['dnn']
     sig = inspect.signature(size)
     mapper = utils.load_functions(__file__)
@@ -77,9 +82,10 @@ def make_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
-    parser.add_argument('--level', default='info', help='logging level')
+    parser.add_argument('--logging', default='logging.yml', help='logging config')
     parser.add_argument('--nohead', action='store_true')
     return parser.parse_args()
+
 
 if __name__ == '__main__':
     main()

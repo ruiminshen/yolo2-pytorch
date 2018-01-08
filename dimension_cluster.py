@@ -19,7 +19,9 @@ import os
 import argparse
 import configparser
 import logging
+import logging.config
 
+import yaml
 import numpy as np
 import nltk.cluster.kmeans
 
@@ -40,8 +42,8 @@ def main():
     args = make_args()
     config = configparser.ConfigParser()
     utils.load_config(config, args.config)
-    if args.level:
-        logging.getLogger().setLevel(args.level.upper())
+    with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
+        logging.config.dictConfig(yaml.load(f))
     cache_dir = utils.get_cache_dir(config)
     paths = [os.path.join(cache_dir, phase + '.pkl') for phase in args.phase]
     data = get_data(paths)
@@ -61,8 +63,9 @@ def make_args():
     parser.add_argument('-r', '--repeats', type=int, default=np.iinfo(np.int).max)
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-p', '--phase', nargs='+', default=['train', 'val', 'test'])
-    parser.add_argument('--level', default='info', help='logging level')
+    parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
+
 
 if __name__ == '__main__':
     main()

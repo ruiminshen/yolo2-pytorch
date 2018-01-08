@@ -21,20 +21,23 @@ import configparser
 import datetime
 import json
 import logging
+import logging.config
 import multiprocessing
 
-import humanize
-import matplotlib.pyplot as plt
+import yaml
 import numpy as np
 import pandas as pd
-import pybenchmark
-import tinydb
+import matplotlib.pyplot as plt
 import torch.autograd
 import torch.cuda
 import torch.optim
 import torch.utils.data
 import torch.nn.functional as F
 import tqdm
+import humanize
+import pybenchmark
+import tinydb
+import filelock
 import cv2
 
 import transform
@@ -173,7 +176,8 @@ class Eval(object):
         self.loader = self.get_loader()
         self.anchors = torch.from_numpy(utils.get_anchors(config)).contiguous()
         dnn = utils.parse_attr(config.get('model', 'dnn'))(config, self.anchors, len(self.category))
-        checkpoint, self.step, self.epoch = utils.train.load_model(self.model_dir)
+        path, self.step, self.epoch = utils.train.load_model(self.model_dir)
+        checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
         dnn.load_state_dict(checkpoint['dnn'])
         logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in dnn.state_dict().values())))
         self.inference = model.Inference(config, dnn, self.anchors)
@@ -192,7 +196,7 @@ class Eval(object):
     def get_loader(self):
         paths = [os.path.join(self.cache_dir, phase + '.pkl') for phase in self.config.get('eval', 'phase').split()]
         dataset = utils.data.Dataset(paths)
-        logging.warning('num_examples=%d' % len(dataset))
+        logging.info('num_examples=%d' % len(dataset))
         size = tuple(map(int, self.config.get('image', 'size').split()))
         try:
             workers = self.config.getint('data', 'workers')
@@ -284,20 +288,17 @@ class Eval(object):
                 cls_ap[c] = average_precision(self.config, tp, num)
         return cls_ap
 
-    def save_db(self, cls_ap):
-        path = utils.get_eval_db(self.config)
+    def save_db(self, cls_ap, path):
         with tinydb.TinyDB(path) as db:
             row = dict([(key, fn(self, cls_ap=cls_ap)) for key, fn in self.mapper])
             db.insert(row)
 
-    def save_tsv(self):
-        path = utils.get_eval_db(self.config)
+    def save_tsv(self, path, path_tsv):
         with open(path, 'r') as f:
             data = json.load(f)
         df = pd.read_json(json.dumps(data['_default']), orient='index')
         df = df[sorted(df)]
-        path = os.path.splitext(path)[0] + '.tsv'
-        df.to_csv(path, index=False, sep='\t')
+        df.to_csv(path_tsv, index=False, sep='\t')
 
     def logging(self, cls_ap):
         for c in cls_ap:
@@ -307,8 +308,9 @@ class Eval(object):
     def __call__(self):
         cls_num, cls_score, cls_tp = self.stat_ap()
         cls_ap = self.merge_ap(cls_num, cls_score, cls_tp)
-        self.save_db(cls_ap)
-        self.save_tsv()
+        path = utils.get_eval_db(self.config)
+        self.save_db(cls_ap, path)
+        self.save_tsv(path, os.path.splitext(path)[0] + '.tsv')
         self.logging(cls_ap)
         return cls_ap
 
@@ -319,8 +321,8 @@ def main():
     utils.load_config(config, args.config)
     for cmd in args.modify:
         utils.modify_config(config, cmd)
-    if args.level:
-        logging.getLogger().setLevel(args.level.upper())
+    with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
+        logging.config.dictConfig(yaml.load(f))
     eval = Eval(args, config)
     eval()
     logging.info(pybenchmark.stats)
@@ -331,8 +333,9 @@ def make_args():
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
     parser.add_argument('-b', '--batch_size', default=16, type=int, help='batch size')
-    parser.add_argument('--level', default='info', help='logging level')
+    parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
+
 
 if __name__ == '__main__':
     main()

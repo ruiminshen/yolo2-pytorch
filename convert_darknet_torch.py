@@ -16,14 +16,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import os
-import logging
 import argparse
 import configparser
+import logging
+import logging.config
 import struct
 import collections
 import shutil
 import hashlib
 
+import yaml
 import numpy as np
 import torch
 import humanize
@@ -72,8 +74,8 @@ def main():
     utils.load_config(config, args.config)
     for cmd in args.modify:
         utils.modify_config(config, cmd)
-    if args.level:
-        logging.getLogger().setLevel(args.level.upper())
+    with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
+        logging.config.dictConfig(yaml.load(f))
     cache_dir = utils.get_cache_dir(config)
     model_dir = utils.get_model_dir(config)
     category = utils.get_category(config, cache_dir if os.path.exists(cache_dir) else None)
@@ -126,8 +128,9 @@ def make_args():
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
     parser.add_argument('-d', '--delete', action='store_true', help='delete logdir')
-    parser.add_argument('--level', default='info', help='logging level')
+    parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
+
 
 if __name__ == '__main__':
     main()

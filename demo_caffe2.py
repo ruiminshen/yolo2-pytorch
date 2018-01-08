@@ -19,8 +19,10 @@ import os
 import argparse
 import configparser
 import logging
+import logging.config
 import hashlib
 
+import yaml
 from caffe2.proto import caffe2_pb2
 from caffe2.python import workspace
 import cv2
@@ -35,8 +37,8 @@ def main():
     utils.load_config(config, args.config)
     for cmd in args.modify:
         utils.modify_config(config, cmd)
-    if args.level:
-        logging.getLogger().setLevel(args.level.upper())
+    with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
+        logging.config.dictConfig(yaml.load(f))
     model_dir = utils.get_model_dir(config)
     height, width = tuple(map(int, config.get('image', 'size').split()))
     resize = transform.parse_transform(config, config.get('transform', 'resize_test'))
@@ -64,8 +66,9 @@ def make_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
-    parser.add_argument('--level', default='info', help='logging level')
+    parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
+
 
 if __name__ == '__main__':
     main()

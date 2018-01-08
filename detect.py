@@ -18,18 +18,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import argparse
 import configparser
 import logging
+import logging.config
 import os
 import time
 
-import cv2
-import humanize
+import yaml
 import numpy as np
-import pybenchmark
 import torch.autograd
 import torch.cuda
 import torch.optim
 import torch.utils.data
 import torch.nn.functional as F
+import humanize
+import pybenchmark
+import cv2
 
 import transform
 import model
@@ -60,7 +62,8 @@ class Detect(object):
         self.anchors = torch.from_numpy(utils.get_anchors(config)).contiguous()
         self.height, self.width = tuple(map(int, config.get('image', 'size').split()))
         self.dnn = utils.parse_attr(config.get('model', 'dnn'))(config, self.anchors, len(self.category))
-        checkpoint, step, epoch = utils.train.load_model(self.model_dir)
+        path, step, epoch = utils.train.load_model(self.model_dir)
+        checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
         self.dnn.load_state_dict(checkpoint['dnn'])
         self.inference = model.Inference(config, self.dnn, self.anchors)
         self.inference.eval()
@@ -173,8 +176,8 @@ def main():
     utils.load_config(config, args.config)
     for cmd in args.modify:
         utils.modify_config(config, cmd)
-    if args.level:
-        logging.getLogger().setLevel(args.level.upper())
+    with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
+        logging.config.dictConfig(yaml.load(f))
     detect = Detect(args, config)
     try:
         while detect.cap.isOpened():
@@ -196,8 +199,9 @@ def make_args():
     parser.add_argument('--crop', nargs='+', type=float, default=[], help='ymin ymax xmin xmax')
     parser.add_argument('--pause', action='store_true')
     parser.add_argument('--fourcc', default='XVID', help='4-character code of codec used to compress the frames, such as XVID, MJPG')
-    parser.add_argument('--level', default='info', help='logging level')
+    parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
+
 
 if __name__ == '__main__':
     main()

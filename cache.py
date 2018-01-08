@@ -19,6 +19,7 @@ import os
 import argparse
 import configparser
 import logging
+import logging.config
 import importlib
 import pickle
 import random
@@ -33,8 +34,8 @@ def main():
     utils.load_config(config, args.config)
     for cmd in args.modify:
         utils.modify_config(config, cmd)
-    if args.level:
-        logging.getLogger().setLevel(args.level.upper())
+    with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
+        logging.config.dictConfig(yaml.load(f))
     cache_dir = utils.get_cache_dir(config)
     os.makedirs(cache_dir, exist_ok=True)
     shutil.copyfile(os.path.expanduser(os.path.expandvars(config.get('cache', 'category'))), os.path.join(cache_dir, 'category'))
@@ -63,7 +64,7 @@ def make_args():
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
     parser.add_argument('-p', '--phase', nargs='+', default=['train', 'val', 'test'])
-    parser.add_argument('--level', default='info', help='logging level')
+    parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
 
 if __name__ == '__main__':

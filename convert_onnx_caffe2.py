@@ -19,7 +19,9 @@ import os
 import argparse
 import configparser
 import logging
+import logging.config
 
+import yaml
 import onnx
 import onnx_caffe2.backend
 import onnx_caffe2.helper
@@ -33,8 +35,8 @@ def main():
     utils.load_config(config, args.config)
     for cmd in args.modify:
         utils.modify_config(config, cmd)
-    if args.level:
-        logging.getLogger().setLevel(args.level.upper())
+    with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
+        logging.config.dictConfig(yaml.load(f))
     model_dir = utils.get_model_dir(config)
     model = onnx.load(model_dir + '.onnx')
     onnx.checker.check_model(model)
@@ -48,8 +50,9 @@ def make_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
-    parser.add_argument('--level', default='info', help='logging level')
+    parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
+
 
 if __name__ == '__main__':
     main()
