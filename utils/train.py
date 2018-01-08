@@ -94,7 +94,7 @@ def load_model(model_dir, step=None, ext='.pth', ext_epoch='.epoch', map_locatio
         epoch = None
     _path = path + ext
     assert os.path.exists(_path), _path
-    return torch.load(_path, map_location=map_location), step, epoch
+    return _path, step, epoch
 
 
 class Saver(object):
