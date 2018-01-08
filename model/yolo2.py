@@ -132,7 +132,10 @@ class Darknet(nn.Module):
         # init
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                m.weight = nn.init.xavier_normal(m.weight)
+                m.weight = nn.init.kaiming_normal(m.weight)
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
 
     def forward(self, x):
         x = self.layers1(x)
@@ -165,9 +168,13 @@ class Tiny(nn.Module):
         layers.append(Conv2d(channels_in, model.output_channels(len(anchors), num_cls), 1, act=False))
         self.layers = nn.Sequential(*layers)
 
+        # init
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 m.weight = nn.init.xavier_normal(m.weight)
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
 
     def forward(self, x):
         return self.layers(x)

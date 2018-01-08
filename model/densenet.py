@@ -50,8 +50,15 @@ class DenseNet(models.DenseNet):
 
         # Final batch norm
         self.layers.add_module('norm5', nn.BatchNorm2d(num_features))
-
         self.layers.add_module('conv', nn.Conv2d(num_features, model.output_channels(len(anchors), num_cls), 1))
+
+        # init
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                m.weight = nn.init.kaiming_normal(m.weight)
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
 
     def forward(self, x):
         return self.layers(x)
