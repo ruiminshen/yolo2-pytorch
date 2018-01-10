@@ -53,7 +53,9 @@ and operators to augment images without labels (such as random blur, random satu
 - [x] Multi-GPU supporting.
 - [ ] Distributed training.
 - [ ] [Focal loss](https://arxiv.org/abs/1708.02002).
-- [ ] Channel-wise model parameter analyzer and pruner.
+- [x] Channel-wise model parameter analyzer.
+- [ ] Channel-wise model parameter pruner.
+- [x] Receptive field analyzer.
 
 ## Quick Start
 
