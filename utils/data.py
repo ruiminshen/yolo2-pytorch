@@ -51,32 +51,37 @@ def padding_labels(data, dim, ignore=set(['size', 'image'])):
     return data
 
 
+def load_pickles(paths):
+    data = []
+    for path in paths:
+        with open(path, 'rb') as f:
+            data += pickle.load(f)
+    return data
+
+
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, paths, transform=lambda data: data, one_hot=None, shuffle=False, dir=None):
+    def __init__(self, data, transform=lambda data: data, one_hot=None, shuffle=False, dir=None):
         """
         Load the cached data (.pkl) into memory.
         :author 申瑞珉 (Ruimin Shen)
-        :param paths: A list contains the paths of the cached data.
+        :param data: A list contains the data samples (dict).
         :param transform: A function transforms (usually performs a sequence of data augmentation operations) the labels in a dict.
         :param one_hot: If a int value (total number of classes) is given, the class label (key "cls") will be generated in a one-hot format.
         :param shuffle: Shuffle the loaded dataset.
         :param dir: The directory to store the exception data.
         """
-        self.dataset = []
-        for path in paths:
-            with open(path, 'rb') as f:
-                self.dataset += pickle.load(f)
+        self.data = data
         if shuffle:
-            random.shuffle(self.dataset)
+            random.shuffle(self.data)
         self.transform = transform
         self.one_hot = None if one_hot is None else sklearn.preprocessing.OneHotEncoder(one_hot, dtype=np.float32)
         self.dir = dir
 
     def __len__(self):
-        return len(self.dataset)
+        return len(self.data)
 
     def __getitem__(self, index):
-        data = copy.deepcopy(self.dataset[index])
+        data = copy.deepcopy(self.data[index])
         try:
             image = cv2.imread(data['path'])
             data['image'] = image

@@ -264,7 +264,7 @@ class Train(object):
     def get_loader(self):
         paths = [os.path.join(self.cache_dir, phase + '.pkl') for phase in self.config.get('train', 'phase').split()]
         dataset = utils.data.Dataset(
-            paths,
+            utils.data.load_pickles(paths),
             transform=transform.augmentation.get_transform(self.config, self.config.get('transform', 'augmentation').split()),
             one_hot=None if self.config.getboolean('train', 'cross_entropy') else len(self.category),
             shuffle=self.config.getboolean('data', 'shuffle'),
@@ -338,6 +338,7 @@ class Train(object):
         with filelock.FileLock(os.path.join(self.model_dir, 'lock'), 0):
             try:
                 loader = self.get_loader()
+                logging.info('num_workers=%d' % loader.num_workers)
                 dnn = utils.parse_attr(self.config.get('model', 'dnn'))(self.config, self.anchors, len(self.category))
                 inference = model.Inference(self.config, dnn, self.anchors)
                 logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in inference.state_dict().values())))

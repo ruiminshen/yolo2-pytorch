@@ -47,7 +47,7 @@ def main():
     batch_size = args.rows * args.cols
     paths = [os.path.join(cache_dir, phase + '.pkl') for phase in args.phase]
     dataset = utils.data.Dataset(
-        paths,
+        utils.data.load_pickles(paths),
         transform=transform.augmentation.get_transform(config, config.get('transform', 'augmentation').split()),
         shuffle=config.getboolean('data', 'shuffle'),
     )

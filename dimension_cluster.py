@@ -34,7 +34,7 @@ def distance(a, b):
 
 
 def get_data(paths):
-    dataset = utils.data.Dataset(paths)
+    dataset = utils.data.Dataset(utils.data.load_pickles(paths))
     return np.concatenate([(data['yx_max'] - data['yx_min']) / utils.image_size(data['path']) for data in dataset.dataset])
 
 

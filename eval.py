@@ -195,7 +195,7 @@ class Eval(object):
 
     def get_loader(self):
         paths = [os.path.join(self.cache_dir, phase + '.pkl') for phase in self.config.get('eval', 'phase').split()]
-        dataset = utils.data.Dataset(paths)
+        dataset = utils.data.Dataset(utils.data.load_pickles(paths))
         logging.info('num_examples=%d' % len(dataset))
         size = tuple(map(int, self.config.get('image', 'size').split()))
         try:
