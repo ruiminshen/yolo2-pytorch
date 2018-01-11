@@ -29,8 +29,8 @@ import time
 import subprocess
 import pickle
 import traceback
-
 import yaml
+
 import numpy as np
 import torch.autograd
 import torch.cuda
@@ -345,10 +345,11 @@ class Train(object):
                 step, epoch = self.restore(dnn)
                 inference = ensure_model(inference)
                 inference.train()
-                optimizer = utils.train.get_optimizer(self.config, self.args.optimizer)(filter(lambda p: p.requires_grad, inference.parameters()), self.args.learning_rate)
-                scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.1)
+                optimizer = eval(self.config.get('train', 'optimizer'))(filter(lambda p: p.requires_grad, inference.parameters()), self.args.learning_rate)
+                scheduler = eval(self.config.get('train', 'scheduler'))(optimizer)
                 for epoch in range(0 if epoch is None else epoch, self.args.epoch):
                     scheduler.step(epoch)
+                    logging.info('lr=%s' % str(scheduler.get_lr()))
                     for data in loader if self.args.quiet else tqdm.tqdm(loader, desc='epoch=%d/%d' % (epoch, self.args.epoch)):
                         kwargs = self.step(inference, optimizer, data)
                         step += 1
