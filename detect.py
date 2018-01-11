@@ -21,8 +21,8 @@ import logging
 import logging.config
 import os
 import time
-
 import yaml
+
 import numpy as np
 import torch.autograd
 import torch.cuda

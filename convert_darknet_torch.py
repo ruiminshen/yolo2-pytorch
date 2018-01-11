@@ -24,8 +24,8 @@ import struct
 import collections
 import shutil
 import hashlib
-
 import yaml
+
 import numpy as np
 import torch
 import humanize

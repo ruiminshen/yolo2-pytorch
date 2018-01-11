@@ -23,8 +23,8 @@ import json
 import logging
 import logging.config
 import multiprocessing
-
 import yaml
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -37,7 +37,6 @@ import tqdm
 import humanize
 import pybenchmark
 import tinydb
-import filelock
 import cv2
 
 import transform

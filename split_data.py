@@ -52,7 +52,7 @@ def main():
 def make_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('root')
-    parser.add_argument('-e', '--exts', nargs='+', default=['.jpg', '.png'])
+    parser.add_argument('-e', '--exts', nargs='+', default=['.jpe', '.jpg', '.jpeg', '.png'])
     parser.add_argument('--train', type=float, default=7)
     parser.add_argument('--val', type=float, default=2)
     parser.add_argument('--test', type=float, default=1)

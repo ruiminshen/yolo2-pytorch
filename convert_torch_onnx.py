@@ -20,8 +20,8 @@ import argparse
 import configparser
 import logging
 import logging.config
-
 import yaml
+
 import torch.autograd
 import torch.cuda
 import torch.optim

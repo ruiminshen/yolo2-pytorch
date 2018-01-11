@@ -22,8 +22,8 @@ import logging
 import logging.config
 import inspect
 import operator
-
 import yaml
+
 import numpy as np
 import torch
 import humanize

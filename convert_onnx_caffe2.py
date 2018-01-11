@@ -20,8 +20,8 @@ import argparse
 import configparser
 import logging
 import logging.config
-
 import yaml
+
 import onnx
 import onnx_caffe2.backend
 import onnx_caffe2.helper
