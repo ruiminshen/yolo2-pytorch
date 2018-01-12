@@ -34,7 +34,10 @@ def main():
                 image = cv2.imread(path)
                 if image is None:
                     sys.stderr.write('disable bad image %s\n' % path)
-                    shutil.move(path, os.path.join(os.path.dirname(path), '.' + os.path.basename(path)))
+                    _path = os.path.join(os.path.dirname(path), '.' + os.path.basename(path))
+                    if os.path.exists(_path):
+                        os.remove(_path)
+                    shutil.move(path, _path)
 
 
 def make_args():
