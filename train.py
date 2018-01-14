@@ -25,7 +25,8 @@ import multiprocessing
 import queue
 import os
 import shutil
-import time
+import io
+import hashlib
 import subprocess
 import pickle
 import traceback
@@ -420,6 +421,10 @@ def main():
         utils.modify_config(config, cmd)
     with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
         logging.config.dictConfig(yaml.load(f))
+    if args.run is None:
+        buffer = io.StringIO()
+        config.write(buffer)
+        args.run = hashlib.md5(buffer.getvalue().encode()).hexdigest()
     logging.info('cd ' + os.getcwd() + ' && ' + subprocess.list2cmdline([sys.executable] + sys.argv))
     train = Train(args, config)
     train()
@@ -438,7 +443,7 @@ def make_args():
     parser.add_argument('-e', '--epoch', type=int, default=np.iinfo(np.int).max)
     parser.add_argument('-d', '--delete', action='store_true', help='delete model')
     parser.add_argument('-q', '--quiet', action='store_true', help='quiet mode')
-    parser.add_argument('-r', '--run', default=time.strftime('%Y-%m-%d_%H-%M-%S'), help='the run name in TensorBoard')
+    parser.add_argument('-r', '--run', help='the run name in TensorBoard')
     parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
 
