@@ -109,6 +109,7 @@ class Saver(object):
         if self.logger is not None:
             self.logger('model saved into ' + path)
         self.tidy()
+        return path
 
     def tidy(self):
         steps = [(int(n), n) for n, e in map(os.path.splitext, os.listdir(self.model_dir)) if n.isdigit() and e == self.ext]
