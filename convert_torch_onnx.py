@@ -52,8 +52,8 @@ def main():
     inference.eval()
     logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in inference.state_dict().values())))
     path, step, epoch = utils.train.load_model(model_dir)
-    checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
-    dnn.load_state_dict(checkpoint['dnn'])
+    state_dict = torch.load(path, map_location=lambda storage, loc: storage)
+    dnn.load_state_dict(state_dict)
     image = torch.autograd.Variable(torch.randn(args.batch_size, 3, height, width))
     path = model_dir + '.onnx'
     logging.info('save ' + path)

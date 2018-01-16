@@ -288,26 +288,28 @@ class Train(object):
         )
         return torch.utils.data.DataLoader(dataset, batch_size=self.args.batch_size * torch.cuda.device_count() if torch.cuda.is_available() else self.args.batch_size, shuffle=True, num_workers=workers, collate_fn=collate_fn, pin_memory=torch.cuda.is_available())
 
-    def restore(self, dnn):
+    def restore(self, model):
         try:
             path, step, epoch = utils.train.load_model(self.model_dir)
-            checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
-            dnn.load_state_dict(checkpoint['dnn'])
+            state_dict = torch.load(path, map_location=lambda storage, loc: storage)
+            model.load_state_dict(state_dict)
         except ValueError:
             step, epoch = 0, 0
-        if self.args.finetune:
-            path = os.path.expanduser(os.path.expandvars(self.args.finetune))
-            if os.path.isdir(path):
-                path, _step, _epoch = utils.train.load_model(path)
-            checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
-            state_dict = dnn.state_dict()
-            ignore = utils.RegexList(self.args.ignore)
-            finetune = [(k, v) for k, v in checkpoint['dnn'].items() if k in state_dict and not ignore(k) and v.size() == state_dict[k].size()]
-            for k, v in finetune:
-                logging.info('fintune %s with size %s' % (k, 'x'.join(map(str, v.size()))))
-            state_dict.update(finetune)
-            dnn.load_state_dict(state_dict)
         return step, epoch
+
+    def finetune(self, model, path):
+        if os.path.isdir(path):
+            path, _step, _epoch = utils.train.load_model(path)
+        _state_dict = torch.load(path, map_location=lambda storage, loc: storage)
+        state_dict = model.state_dict()
+        ignore = utils.RegexList(self.args.ignore)
+        for key, value in state_dict.items():
+            try:
+                if not ignore(key):
+                    state_dict[key] = _state_dict[key]
+            except KeyError:
+                logging.warning('%s not in finetune file %s' % (key, path))
+        model.load_state_dict(state_dict)
 
     def step(self, inference, optimizer, data):
         for key in data:
@@ -344,13 +346,21 @@ class Train(object):
                 inference = model.Inference(self.config, dnn, self.anchors)
                 logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in inference.state_dict().values())))
                 step, epoch = self.restore(dnn)
+                if self.args.finetune:
+                    path = os.path.expanduser(os.path.expandvars(self.args.finetune))
+                    logging.info('finetune from ' + path)
+                    self.finetune(dnn, path)
                 inference = ensure_model(inference)
                 inference.train()
                 optimizer = eval(self.config.get('train', 'optimizer'))(filter(lambda p: p.requires_grad, inference.parameters()), self.args.learning_rate)
-                scheduler = eval(self.config.get('train', 'scheduler'))(optimizer)
+                try:
+                    scheduler = eval(self.config.get('train', 'scheduler'))(optimizer)
+                except configparser.NoOptionError:
+                    scheduler = None
                 for epoch in range(0 if epoch is None else epoch, self.args.epoch):
-                    scheduler.step(epoch)
-                    logging.info('lr=%s' % str(scheduler.get_lr()))
+                    if scheduler is not None:
+                        scheduler.step(epoch)
+                        logging.info('lr=%s' % str(scheduler.get_lr()))
                     for data in loader if self.args.quiet else tqdm.tqdm(loader, desc='epoch=%d/%d' % (epoch, self.args.epoch)):
                         kwargs = self.step(inference, optimizer, data)
                         step += 1
@@ -371,21 +381,21 @@ class Train(object):
                 self.save(**kwargs)
             except:
                 traceback.print_exc()
-                with open(os.path.join(self.model_dir, 'data.pkl'), 'wb') as f:
-                    pickle.dump(data, f)
+                try:
+                    with open(os.path.join(self.model_dir, 'data.pkl'), 'wb') as f:
+                        pickle.dump(data, f)
+                except UnboundLocalError:
+                    pass
                 raise
             finally:
                 self.stop()
-
-    def dump_object(self, **kwargs):
-        return dict(dnn=kwargs['dnn'].state_dict(), optimizer=kwargs['optimizer'].state_dict())
 
     def check_nan(self, **kwargs):
         step, loss_total, loss, data = (kwargs[key] for key in 'step, loss_total, loss, data'.split(', '))
         if np.isnan(loss_total.data.cpu()[0]):
             dump_dir = os.path.join(self.model_dir, str(step))
             os.makedirs(dump_dir, exist_ok=True)
-            torch.save(self.dump_object(**kwargs), os.path.join(dump_dir, 'model.pth'))
+            torch.save(kwargs['dnn'].state_dict(), os.path.join(dump_dir, 'model.pth'))
             torch.save(data, os.path.join(dump_dir, 'data.pth'))
             for key in loss:
                 logging.warning('%s=%f' % (key, loss[key].data.cpu()[0]))
@@ -394,7 +404,10 @@ class Train(object):
     def save(self, **kwargs):
         step, epoch = (kwargs[key] for key in 'step, epoch'.split(', '))
         self.check_nan(**kwargs)
-        self.saver(self.dump_object(**kwargs), step, epoch)
+        state_dict = kwargs['dnn'].state_dict()
+        for key in state_dict:
+            state_dict[key] = state_dict[key].cpu()
+        self.saver(state_dict, step, epoch)
 
     def eval(self, **kwargs):
         step, inference = (kwargs[key] for key in 'step, inference'.split(', '))

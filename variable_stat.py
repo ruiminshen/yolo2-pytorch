@@ -66,8 +66,7 @@ def main():
         logging.config.dictConfig(yaml.load(f))
     model_dir = utils.get_model_dir(config)
     path, step, epoch = utils.train.load_model(model_dir)
-    checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
-    state_dict = checkpoint['dnn']
+    state_dict = torch.load(path, map_location=lambda storage, loc: storage)
     sig = inspect.signature(size)
     mapper = utils.load_functions(__file__)
     mapper = [(key, fn) for key, fn in mapper if inspect.signature(fn).parameters == sig.parameters]

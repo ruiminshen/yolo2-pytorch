@@ -63,8 +63,8 @@ class Detect(object):
         self.height, self.width = tuple(map(int, config.get('image', 'size').split()))
         self.dnn = utils.parse_attr(config.get('model', 'dnn'))(config, self.anchors, len(self.category))
         path, step, epoch = utils.train.load_model(self.model_dir)
-        checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
-        self.dnn.load_state_dict(checkpoint['dnn'])
+        state_dict = torch.load(path, map_location=lambda storage, loc: storage)
+        self.dnn.load_state_dict(state_dict)
         self.inference = model.Inference(config, self.dnn, self.anchors)
         self.inference.eval()
         if torch.cuda.is_available():
