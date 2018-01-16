@@ -16,16 +16,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import math
+import logging
 
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
-import torchvision.models.resnet as models
-from torchvision.models.resnet import model_urls, BasicBlock, Bottleneck
+import torchvision.models.resnet as _model
+from torchvision.models.resnet import BasicBlock, Bottleneck
 
 import model
 
 
-class ResNet(models.ResNet):
+class ResNet(_model.ResNet):
     def __init__(self, config, anchors, num_cls, block, layers):
         self.inplanes = 64
         nn.Module.__init__(self)
@@ -61,36 +62,66 @@ class ResNet(models.ResNet):
         return self.conv(x)
 
 
-def resnet18(config, anchors, num_cls, pretrained=False, **kwargs):
+def resnet18(config, anchors, num_cls, **kwargs):
     model = ResNet(config, anchors, num_cls, BasicBlock, [2, 2, 2, 2], **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(models.model_urls['resnet18']))
+    if config.getboolean('model', 'pretrained'):
+        url = _model.model_urls['resnet18']
+        logging.info('use pretrained model: ' + url)
+        state_dict = model.state_dict()
+        for key, value in model_zoo.load_url(url).items():
+            if key in state_dict:
+                state_dict[key] = value
+        model.load_state_dict(state_dict)
     return model
 
 
-def resnet34(config, anchors, num_cls, pretrained=False, **kwargs):
+def resnet34(config, anchors, num_cls, **kwargs):
     model = ResNet(config, anchors, num_cls, BasicBlock, [3, 4, 6, 3], **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet34']))
+    if config.getboolean('model', 'pretrained'):
+        url = _model.model_urls['resnet34']
+        logging.info('use pretrained model: ' + url)
+        state_dict = model.state_dict()
+        for key, value in model_zoo.load_url(url).items():
+            if key in state_dict:
+                state_dict[key] = value
+        model.load_state_dict(state_dict)
     return model
 
 
-def resnet50(config, anchors, num_cls, pretrained=False, **kwargs):
+def resnet50(config, anchors, num_cls, **kwargs):
     model = ResNet(config, anchors, num_cls, Bottleneck, [3, 4, 6, 3], **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet50']))
+    if config.getboolean('model', 'pretrained'):
+        url = _model.model_urls['resnet50']
+        logging.info('use pretrained model: ' + url)
+        state_dict = model.state_dict()
+        for key, value in model_zoo.load_url(url).items():
+            if key in state_dict:
+                state_dict[key] = value
+        model.load_state_dict(state_dict)
     return model
 
 
-def resnet101(config, anchors, num_cls, pretrained=False, **kwargs):
+def resnet101(config, anchors, num_cls, **kwargs):
     model = ResNet(config, anchors, num_cls, Bottleneck, [3, 4, 23, 3], **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet101']))
+    if config.getboolean('model', 'pretrained'):
+        url = _model.model_urls['resnet101']
+        logging.info('use pretrained model: ' + url)
+        state_dict = model.state_dict()
+        for key, value in model_zoo.load_url(url).items():
+            if key in state_dict:
+                state_dict[key] = value
+        model.load_state_dict(state_dict)
     return model
 
 
-def resnet152(config, anchors, num_cls, pretrained=False, **kwargs):
-    model = ResNet(Bottleneck, [3, 8, 36, 3], **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet152']))
+def resnet152(config, anchors, num_cls, **kwargs):
+    model = ResNet(config, anchors, num_cls, Bottleneck, [3, 8, 36, 3], **kwargs)
+    if config.getboolean('model', 'pretrained'):
+        url = _model.model_urls['resnet152']
+        logging.info('use pretrained model: ' + url)
+        state_dict = model.state_dict()
+        for key, value in model_zoo.load_url(url).items():
+            if key in state_dict:
+                state_dict[key] = value
+        model.load_state_dict(state_dict)
     return model

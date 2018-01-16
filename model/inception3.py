@@ -15,17 +15,20 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+import logging
+
 import scipy.stats as stats
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.models.inception as models
+import torch.utils.model_zoo
+import torchvision.models.inception as _model
 from torchvision.models.inception import BasicConv2d, InceptionA, InceptionB, InceptionC, InceptionD, InceptionE
 
 import model
 
 
-class Inception3(models.Inception3):
+class Inception3(_model.Inception3):
     def __init__(self, config, anchors, num_cls, transform_input=False):
         nn.Module.__init__(self)
         self.transform_input = transform_input
@@ -57,6 +60,15 @@ class Inception3(models.Inception3):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
+
+        if config.getboolean('model', 'pretrained'):
+            url = _model.model_urls['inception_v3_google']
+            logging.info('use pretrained model: ' + url)
+            state_dict = self.state_dict()
+            for key, value in torch.utils.model_zoo.load_url(url).items():
+                if key in state_dict:
+                    state_dict[key] = value
+            self.load_state_dict(state_dict)
 
     def forward(self, x):
         if self.transform_input:
