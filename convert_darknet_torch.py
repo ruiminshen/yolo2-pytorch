@@ -113,8 +113,16 @@ def main():
     finally:
         if remaining > 0:
             logging.warning('%d bytes remaining' % remaining)
-        state_dict.update(dict(layers))
-        dnn.load_state_dict(state_dict)
+        _state_dict = collections.OrderedDict(layers)
+        if args.pure:
+            diff = [key for key in state_dict if key not in _state_dict]
+            if diff:
+                logging.warning('parameters are not converted: ' + ', '.join(diff))
+            state_dict = _state_dict
+        else:
+            for key in state_dict:
+                if key in _state_dict:
+                    state_dict[key] = _state_dict[key]
         if args.delete:
             logging.warning('delete model directory: ' + model_dir)
             shutil.rmtree(model_dir, ignore_errors=True)
@@ -128,6 +136,7 @@ def make_args():
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
     parser.add_argument('-d', '--delete', action='store_true', help='delete logdir')
+    parser.add_argument('-p', '--pure', action='store_true')
     parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
 
