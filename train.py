@@ -360,7 +360,7 @@ class Train(object):
                 for epoch in range(0 if epoch is None else epoch, self.args.epoch):
                     if scheduler is not None:
                         scheduler.step(epoch)
-                        logging.info('lr=%s' % str(scheduler.get_lr()))
+                        logging.info('epoch=%d, lr=%s' % (epoch, str(scheduler.get_lr())))
                     for data in loader if self.args.quiet else tqdm.tqdm(loader, desc='epoch=%d/%d' % (epoch, self.args.epoch)):
                         kwargs = self.step(inference, optimizer, data)
                         step += 1
@@ -452,7 +452,7 @@ def make_args():
     parser.add_argument('-f', '--finetune')
     parser.add_argument('-i', '--ignore', nargs='+', default=[], help='regex to ignore weights while fintuning')
     parser.add_argument('-o', '--optimizer', default='adam')
-    parser.add_argument('-lr', '--learning_rate', default=1e-6, type=float, help='learning rate')
+    parser.add_argument('-lr', '--learning_rate', default=1e-3, type=float, help='learning rate')
     parser.add_argument('-e', '--epoch', type=int, default=np.iinfo(np.int).max)
     parser.add_argument('-d', '--delete', action='store_true', help='delete model')
     parser.add_argument('-q', '--quiet', action='store_true', help='quiet mode')
