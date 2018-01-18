@@ -63,9 +63,7 @@ done
 
 wget http://pjreddie.com/media/files/darknet19_448.conv.23 -nc -P ~/model/darknet
 
-CACHE_NAME=cache_voc
-MODEL_NAME=model_voc
-MODEL=model.yolo2.Darknet
+export CACHE_NAME=cache_voc MODEL_NAME=model_voc MODEL=model.yolo2.Darknet
 python3 convert_darknet_torch.py ~/model/darknet/darknet19_448.conv.23 -m model/name=$MODEL_NAME model/dnn=$MODEL -d
 python3 train.py -b 64 -lr 1e-3 -e 160 -m cache/name=$CACHE_NAME model/name=$MODEL_NAME model/dnn=$MODEL train/optimizer='lambda params, lr: torch.optim.SGD(params, lr, weight_decay=5e-4, momentum=0.9)' train/scheduler='lambda optimizer: torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[60, 90], gamma=0.1)'
 python3 eval.py -m cache/name=$CACHE_NAME model/name=$MODEL_NAME model/dnn=$MODEL
