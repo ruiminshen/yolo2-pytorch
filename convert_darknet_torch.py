@@ -119,7 +119,7 @@ def main():
             logging.warning('delete model directory: ' + model_dir)
             shutil.rmtree(model_dir, ignore_errors=True)
         saver = utils.train.Saver(model_dir, config.getint('save', 'keep'))
-        saver(dict(dnn=state_dict), 0, 0)
+        saver(state_dict, 0, 0)
 
 
 def make_args():
