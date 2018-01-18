@@ -31,7 +31,7 @@ rm $ROOT/val2014/COCO_val2014_000000320612.jpg
 python3 cache.py -m cache/datasets=cache.voc.cache cache/name=cache_voc cache/category=config/category/20
 
 echo test models with 20 classes
-python3 cache.py -m cache/datasets="cache.voc.cache cache.coco.cache" cache/name=cache_20 cache/category=config/category/20
+python3 cache.py -m cache/datasets='cache.voc.cache cache.coco.cache' cache/name=cache_20 cache/category=config/category/20
 
 MODELS="
 yolo-voc
@@ -62,6 +62,10 @@ do
 done
 
 wget http://pjreddie.com/media/files/darknet19_448.conv.23 -nc -P ~/model/darknet
-python3 convert_darknet_torch.py ~/model/darknet/darknet19_448.conv.23 -m model/name=model_voc model/dnn=model.yolo2.Darknet -d
-python3 train.py -b 16 -lr 1e-3 -e 160 -m cache/name=cache_voc model/name=model_voc model/dnn=model.yolo2.Darknet train/optimizer="lambda params, lr: torch.optim.SGD(params, lr, weight_decay=5e-4, momentum=0.9)" train/scheduler="lambda optimizer: torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[60, 90], gamma=0.1)"
-python3 eval.py -m cache/name=cache_voc model/name=model_voc model/dnn=model.yolo2.Darknet
+
+CACHE_NAME=cache_voc
+MODEL_NAME=model_voc
+MODEL=model.yolo2.Darknet
+python3 convert_darknet_torch.py ~/model/darknet/darknet19_448.conv.23 -m model/name=$MODEL_NAME model/dnn=$MODEL -d
+python3 train.py -b 64 -lr 1e-3 -e 160 -m cache/name=$CACHE_NAME model/name=$MODEL_NAME model/dnn=$MODEL train/optimizer='lambda params, lr: torch.optim.SGD(params, lr, weight_decay=5e-4, momentum=0.9)' train/scheduler='lambda optimizer: torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[60, 90], gamma=0.1)'
+python3 eval.py -m cache/name=$CACHE_NAME model/name=$MODEL_NAME model/dnn=$MODEL
