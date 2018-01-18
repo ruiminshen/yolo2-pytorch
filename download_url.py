@@ -1,55 +1,58 @@
+"""
+Copyright (C) 2017, 申瑞珉 (Ruimin Shen)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+"""
+
 import os
 import sys
 import argparse
-import hashlib
-import requests
-import mimetypes
 import threading
-import traceback
 
 import numpy as np
 import tqdm
+import wget
 
 
-def _task(root_image, root_url, url):
-    name = hashlib.md5(url.encode()).hexdigest()
-    response = requests.get(url)
-    content_type = response.headers['content-type']
-    ext = mimetypes.guess_extension(content_type, False)
-    path = os.path.join(root_image, name) + ext
-    if not os.path.exists(path):
-        try:
-            with open(path, 'wb') as f:
-                for data in response.iter_content():
-                    f.write(data)
-        except:
-            os.remove(path)
-            raise
-    with open(os.path.join(root_url, name), 'w') as f:
+def _task(url, root, ext):
+    path = wget.download(url, bar=None)
+    with open(path + ext, 'w') as f:
         f.write(url)
 
 
-def task(root_image, root_url, urls, pbar):
+def task(urls, root, ext, pbar, lock, f):
     for url in urls:
+        url = url.rstrip()
         try:
-            _task(root_image, root_url, url)
+            _task(url, root, ext)
         except:
-            traceback.print_exc()
+            with lock:
+                f.write(url + '\n')
         pbar.update()
 
 
 def main():
     args = make_args()
     root = os.path.expandvars(os.path.expanduser(args.root))
-    root_image = os.path.join(root, args.dir_image)
-    root_url = os.path.join(root, args.dir_url)
-    os.makedirs(root_image, exist_ok=True)
-    os.makedirs(root_url, exist_ok=True)
+    os.makedirs(root, exist_ok=True)
+    os.chdir(root)
     workers = []
-    urls = sys.stdin.readlines()
-    with tqdm.tqdm(total=len(urls)) as pbar:
+    urls = list(set(sys.stdin.readlines()))
+    lock = threading.Lock()
+    with tqdm.tqdm(total=len(urls)) as pbar, open(root + args.ext, 'w') as f:
         for urls in np.array_split(urls, args.workers):
-            w = threading.Thread(target=task, args=(root_image, root_url, urls, pbar))
+            w = threading.Thread(target=task, args=(urls, root, args.ext, pbar, lock, f))
             w.start()
             workers.append(w)
         for w in workers:
@@ -60,8 +63,7 @@ def make_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('root')
     parser.add_argument('-w', '--workers', type=int, default=6)
-    parser.add_argument('--dir_image', default='image')
-    parser.add_argument('--dir_url', default='url')
+    parser.add_argument('-e', '--ext', default='.url')
     return parser.parse_args()
 
 
