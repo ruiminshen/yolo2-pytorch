@@ -24,7 +24,7 @@ ROOT=~/data/coco
 for LINK in $LINKS
 do
 	wget $LINK -nc -P $ROOT
-	tar -kxvf $ROOT/$(basename $LINK) -C $ROOT
+	unzip -n $ROOT/$(basename $LINK) -d $ROOT
 done
 rm $ROOT/val2014/COCO_val2014_000000320612.jpg
 
