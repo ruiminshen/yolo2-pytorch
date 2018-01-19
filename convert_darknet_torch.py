@@ -113,21 +113,16 @@ def main():
     finally:
         if remaining > 0:
             logging.warning('%d bytes remaining' % remaining)
-        _state_dict = collections.OrderedDict(layers)
-        if args.pure:
-            diff = [key for key in state_dict if key not in _state_dict]
-            if diff:
-                logging.warning('parameters are not converted: ' + ', '.join(diff))
-            state_dict = _state_dict
-        else:
-            for key in state_dict:
-                if key in _state_dict:
-                    state_dict[key] = _state_dict[key]
+        state_dict = collections.OrderedDict(layers)
         if args.delete:
             logging.warning('delete model directory: ' + model_dir)
             shutil.rmtree(model_dir, ignore_errors=True)
-        saver = utils.train.Saver(model_dir, config.getint('save', 'keep'))
-        saver(state_dict, 0, 0)
+        saver = utils.train.Saver(model_dir, config.getint('save', 'keep'), logger=None)
+        path = saver(state_dict, 0, 0) + saver.ext
+        if args.copy is not None:
+            _path = os.path.expandvars(os.path.expanduser(args.copy))
+            logging.info('copy %s to %s' % (path, _path))
+            shutil.copy(path, _path)
 
 
 def make_args():
@@ -136,7 +131,7 @@ def make_args():
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
     parser.add_argument('-d', '--delete', action='store_true', help='delete logdir')
-    parser.add_argument('-p', '--pure', action='store_true')
+    parser.add_argument('--copy', help='copy model')
     parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
 
