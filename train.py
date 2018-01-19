@@ -417,13 +417,29 @@ class Train(object):
         try:
             e = _eval.Eval(self.args, self.config)
             cls_ap = e()
+            self.backup_best(cls_ap, e.path)
             for c in cls_ap:
                 self.summary_worker.writer.add_scalar('ap/' + self.category[c], cls_ap[c], step)
             self.summary_worker.writer.add_scalar('mean_ap', np.mean(list(cls_ap.values())), step)
-        except Exception as e:
-            logging.warning(e)
+        except:
+            traceback.print_exc()
         if torch.cuda.is_available():
             inference.cuda()
+
+    def backup_best(self, cls_ap, path):
+        try:
+            with open(self.model_dir + '.pkl', 'rb') as f:
+                best = np.mean(list(pickle.load(f).values()))
+        except:
+            best = np.finfo(np.float32).min
+        metric = np.mean(list(cls_ap.values()))
+        if metric > best:
+            with open(self.model_dir + '.pkl', 'wb') as f:
+                pickle.dump(cls_ap, f)
+            shutil.copy(path, self.model_dir + '.pth')
+            logging.info('best model (%f) saved into %s.*' % (metric, self.model_dir))
+        else:
+            logging.info('best metric %f >= %f' % (best, metric))
 
 
 def main():
