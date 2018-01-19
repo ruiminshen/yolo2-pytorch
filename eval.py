@@ -292,11 +292,27 @@ class Eval(object):
             row = dict([(key, fn(self, cls_ap=cls_ap)) for key, fn in self.mapper])
             db.insert(row)
 
-    def save_tsv(self, path, path_tsv):
+    def save_xlsx(self, path, path_xlsx, sheet='sheet', sort='timestamp'):
         with open(path, 'r') as f:
             data = json.load(f)
-        df = pd.read_json(json.dumps(data['_default']), orient='index')
+        df = pd.read_json(json.dumps(data['_default']), orient='index', convert_dates=False)
         df = df[sorted(df)]
+        if sort is not None:
+            df = df.sort_values(sort)
+        writer = pd.ExcelWriter(path_xlsx, engine='xlsxwriter')
+        df.to_excel(writer, sheet, index=False)
+        worksheet = writer.sheets[sheet]
+        worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
+        worksheet.freeze_panes(1, 0)
+        writer.save()
+
+    def save_tsv(self, path, path_tsv, sort='timestamp'):
+        with open(path, 'r') as f:
+            data = json.load(f)
+        df = pd.read_json(json.dumps(data['_default']), orient='index', convert_dates=False)
+        df = df[sorted(df)]
+        if sort is not None:
+            df = df.sort_values(sort)
         df.to_csv(path_tsv, index=False, sep='\t')
 
     def logging(self, cls_ap):
@@ -309,7 +325,7 @@ class Eval(object):
         cls_ap = self.merge_ap(cls_num, cls_score, cls_tp)
         path = utils.get_eval_db(self.config)
         self.save_db(cls_ap, path)
-        self.save_tsv(path, os.path.splitext(path)[0] + '.tsv')
+        self.save_xlsx(path, os.path.splitext(path)[0] + '.xlsx')
         self.logging(cls_ap)
         return cls_ap
 
