@@ -90,7 +90,7 @@ class Saver(object):
         self.keep = keep
         self.ext = ext
         self.ext_epoch = ext_epoch
-        self.logger = logger
+        self.logger = lambda s: s if logger is None else logger
 
     def __call__(self, obj, step, epoch=None):
         """
@@ -106,8 +106,7 @@ class Saver(object):
         if epoch is not None:
             with open(path + self.ext_epoch, 'w') as f:
                 f.write(str(epoch))
-        if self.logger is not None:
-            self.logger('model saved into ' + path)
+        self.logger('model saved into ' + path)
         self.tidy()
         return path
 
