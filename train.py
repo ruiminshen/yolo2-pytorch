@@ -20,9 +20,7 @@ import argparse
 import configparser
 import logging
 import logging.config
-import threading
 import multiprocessing
-import queue
 import os
 import shutil
 import io
@@ -72,23 +70,22 @@ def ensure_model(model):
     return model
 
 
-class SummaryWorker(threading.Thread):
+class SummaryWorker(multiprocessing.Process):
     def __init__(self, env):
         super(SummaryWorker, self).__init__()
         self.config = env.config
-        self.running = True
-        self.queue = queue.Queue()
+        self.queue = multiprocessing.Queue()
         self.writer = SummaryWriter(os.path.join(env.model_dir, env.args.run))
         try:
-            self.timer_scalar = utils.train.Timer(env.config.getfloat('summary_secs', 'scalar'))
+            self.timer_scalar = utils.train.Timer(env.config.getfloat('summary', 'scalar'))
         except configparser.NoOptionError:
             self.timer_scalar = lambda: False
         try:
-            self.timer_image = utils.train.Timer(env.config.getfloat('summary_secs', 'image'))
+            self.timer_image = utils.train.Timer(env.config.getfloat('summary', 'image'))
         except configparser.NoOptionError:
             self.timer_image = lambda: False
         try:
-            self.timer_histogram = utils.train.Timer(env.config.getfloat('summary_secs', 'histogram'))
+            self.timer_histogram = utils.train.Timer(env.config.getfloat('summary', 'histogram'))
         except configparser.NoOptionError:
             self.timer_histogram = lambda: False
         with open(os.path.expanduser(os.path.expandvars(env.config.get('summary_histogram', 'parameters'))), 'r') as f:
@@ -98,24 +95,25 @@ class SummaryWorker(threading.Thread):
 
     def __call__(self, name, **kwargs):
         if getattr(self, 'timer_' + name)():
-            func = getattr(self, 'summary_' + name)
             kwargs = getattr(self, 'copy_' + name)(**kwargs)
-            self.queue.put((func, kwargs))
+            self.queue.put((name, kwargs))
 
     def stop(self):
-        if self.running:
-            self.running = False
-            self.queue.put((lambda **kwargs: None, {}))
+        self.queue.put((None, {}))
 
     def run(self):
-        while self.running:
-            func, kwargs = self.queue.get()
+        while True:
+            name, kwargs = self.queue.get()
+            if name is None:
+                break
+            func = getattr(self, 'summary_' + name)
             try:
                 func(**kwargs)
             except:
                 traceback.print_exc()
 
     def copy_scalar(self, **kwargs):
+        return dict(step=kwargs['step'], loss_total=0)
         step, loss_total, loss, loss_hparam = (kwargs[key] for key in 'step, loss_total, loss, loss_hparam'.split(', '))
         loss_total = loss_total.data.clone().cpu().numpy()
         loss = {key: loss[key].data.clone().cpu().numpy() for key in loss}
@@ -127,6 +125,8 @@ class SummaryWorker(threading.Thread):
         )
 
     def summary_scalar(self, **kwargs):
+        self.writer.add_scalar('loss_total', kwargs['loss_total'], kwargs['step'])
+        return
         step, loss_total, loss, loss_hparam = (kwargs[key] for key in 'step, loss_total, loss, loss_hparam'.split(', '))
         for key in loss:
             self.writer.add_scalar('loss/' + key, loss[key][0], step)
