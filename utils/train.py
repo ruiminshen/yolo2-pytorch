@@ -90,7 +90,7 @@ class Saver(object):
         self.keep = keep
         self.ext = ext
         self.ext_epoch = ext_epoch
-        self.logger = lambda s: s if logger is None else logger
+        self.logger = (lambda s: s) if logger is None else logger
 
     def __call__(self, obj, step, epoch=None):
         """
