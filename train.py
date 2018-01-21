@@ -114,7 +114,6 @@ class SummaryWorker(multiprocessing.Process):
                 traceback.print_exc()
 
     def copy_scalar(self, **kwargs):
-        return dict(step=kwargs['step'], loss_total=0)
         step, loss_total, loss, loss_hparam = (kwargs[key] for key in 'step, loss_total, loss, loss_hparam'.split(', '))
         loss_total = loss_total.data.clone().cpu().numpy()
         loss = {key: loss[key].data.clone().cpu().numpy() for key in loss}
@@ -126,8 +125,6 @@ class SummaryWorker(multiprocessing.Process):
         )
 
     def summary_scalar(self, **kwargs):
-        self.writer.add_scalar('loss_total', kwargs['loss_total'], kwargs['step'])
-        return
         step, loss_total, loss, loss_hparam = (kwargs[key] for key in 'step, loss_total, loss, loss_hparam'.split(', '))
         for key in loss:
             self.writer.add_scalar('loss/' + key, loss[key][0], step)
