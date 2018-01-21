@@ -73,9 +73,9 @@ def ensure_model(model):
 class SummaryWorker(multiprocessing.Process):
     def __init__(self, env):
         super(SummaryWorker, self).__init__()
+        self.env = env
         self.config = env.config
         self.queue = multiprocessing.Queue()
-        self.writer = SummaryWriter(os.path.join(env.model_dir, env.args.run))
         try:
             self.timer_scalar = utils.train.Timer(env.config.getfloat('summary', 'scalar'))
         except configparser.NoOptionError:
@@ -102,6 +102,7 @@ class SummaryWorker(multiprocessing.Process):
         self.queue.put((None, {}))
 
     def run(self):
+        self.writer = SummaryWriter(os.path.join(self.env.model_dir, self.env.args.run))
         while True:
             name, kwargs = self.queue.get()
             if name is None:
@@ -418,9 +419,6 @@ class Train(object):
             e = _eval.Eval(self.args, self.config)
             cls_ap = e()
             self.backup_best(cls_ap, e.path)
-            for c in cls_ap:
-                self.summary_worker.writer.add_scalar('ap/' + self.category[c], cls_ap[c], step)
-            self.summary_worker.writer.add_scalar('mean_ap', np.mean(list(cls_ap.values())), step)
         except:
             traceback.print_exc()
         if torch.cuda.is_available():
