@@ -20,6 +20,7 @@ import argparse
 import configparser
 import logging
 import logging.config
+import inspect
 import yaml
 
 import torch.autograd
@@ -30,35 +31,45 @@ import humanize
 import graphviz
 
 import utils.train
-import model
 
 
 class Graph(object):
     def __init__(self, config, state_dict):
-        self.seen = set()
-        self.mapper = {id(v): k for k, v in state_dict.items()}
         self.dot = graphviz.Digraph(node_attr=dict(config.items('digraph_node_attr')), graph_attr=dict(config.items('digraph_graph_attr')))
+        self.state_dict = state_dict
+        self.var_name = {t._cdata: k for k, t in state_dict.items()}
+        self.seen = set()
+        self.drawn = set()
 
-    def __call__(self, fn):
-        if fn not in self.seen:
-            if torch.is_tensor(fn):
-                self.dot.node(str(id(fn)), ', '.join(map(str, fn.size())), fillcolor='orange')
-            elif hasattr(fn, 'variable'):
-                var = fn.variable
-                node_name = '%s\n %s' % (self.mapper[id(var.data)], ', '.join(map(str, var.size())))
-                self.dot.node(str(id(fn)), node_name, fillcolor='lightblue')
-            else:
-                self.dot.node(str(id(fn)), type(fn).__name__)
-            self.seen.add(fn)
-            if hasattr(fn, 'next_functions'):
-                for _fn, _ in fn.next_functions:
-                    if _fn is not None:
-                        self.dot.edge(str(id(_fn)), str(id(fn)))
-                        self.__call__(_fn)
-            if hasattr(fn, 'saved_tensors'):
-                for t in fn.saved_tensors:
-                    self.dot.edge(str(id(t)), str(id(fn)))
-                    self.__call__(t)
+    def __call__(self, node):
+        if node not in self.seen:
+            self.seen.add(node)
+            self.dot.node(str(id(node)), type(node).__name__)
+            if hasattr(node, 'next_functions'):
+                for child, _ in node.next_functions:
+                    if child is not None:
+                        self.__call__(child)
+                        self.dot.edge(str(id(child)), str(id(node)))
+            tensors = [t for name, t in inspect.getmembers(node) if torch.is_tensor(t)]
+            if hasattr(node, 'saved_tensors'):
+                tensors += node.saved_tensors
+            for tensor in tensors:
+                name = self.draw_tensor(tensor)
+                self.dot.edge(name, str(id(node)))
+                self.drawn.add(name)
+            return self.draw(node)
+
+    def draw(self, node):
+        if hasattr(node, 'variable'):
+            self.draw_tensor(node.variable.data, name=str(id(node)), fillcolor='lightblue')
+        else:
+            self.dot.node(str(id(node)), type(node).__name__)
+
+    def draw_tensor(self, tensor, name=None, fillcolor='orange'):
+        var_name = self.var_name[tensor._cdata]
+        self.drawn.add(var_name)
+        self.dot.node(var_name if name is None else name, '%s\n%s' % (var_name, str(list(tensor.size()))), fillcolor=fillcolor)
+        return var_name
 
 
 def main():
@@ -77,8 +88,12 @@ def main():
     height, width = tuple(map(int, config.get('image', 'size').split()))
     image = torch.autograd.Variable(torch.randn(args.batch_size, 3, height, width))
     output = dnn(image)
-    graph = Graph(config, dnn.state_dict())
+    state_dict = dnn.state_dict()
+    graph = Graph(config, state_dict)
     graph(output.grad_fn)
+    diff = [key for key in state_dict if key not in graph.drawn]
+    if diff:
+        logging.warning('variables not shown: ' + str(diff))
     path = graph.dot.view(directory=model_dir)
     logging.info(path)
 
