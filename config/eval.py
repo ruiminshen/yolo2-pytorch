@@ -16,6 +16,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import os
+import configparser
 
 import numpy as np
 import humanize
@@ -43,6 +44,10 @@ def model(env, **kwargs):
 
 
 def size_dnn(env, **kwargs):
+    return sum(var.cpu().numpy().nbytes for var in env.inference.state_dict().values())
+
+
+def size_dnn_nature(env, **kwargs):
     return humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in env.inference.state_dict().values()))
 
 
@@ -92,4 +97,21 @@ def eval_ap(env, **kwargs):
 
 
 def hparam(env, **kwargs):
-    return ', '.join([option + '=' + value for option, value in env._config.items('hparam')]) if hasattr(env, '_config') else None
+    try:
+        return ', '.join([option + '=' + value for option, value in env._config.items('hparam')])
+    except AttributeError:
+        return None
+
+
+def optimizer(env, **kwargs):
+    try:
+        return env._config.get('train', 'optimizer')
+    except (AttributeError, configparser.NoOptionError):
+        return None
+
+
+def scheduler(env, **kwargs):
+    try:
+        return env._config.get('train', 'scheduler')
+    except (AttributeError, configparser.NoOptionError):
+        return None
