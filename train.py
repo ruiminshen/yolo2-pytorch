@@ -462,7 +462,6 @@ def make_args():
     parser.add_argument('-b', '--batch_size', default=16, type=int, help='batch size')
     parser.add_argument('-f', '--finetune')
     parser.add_argument('-i', '--ignore', nargs='+', default=[], help='regex to ignore weights while fintuning')
-    parser.add_argument('-o', '--optimizer', default='adam')
     parser.add_argument('-lr', '--learning_rate', default=1e-3, type=float, help='learning rate')
     parser.add_argument('-e', '--epoch', type=int, default=np.iinfo(np.int).max)
     parser.add_argument('-d', '--delete', action='store_true', help='delete model')
