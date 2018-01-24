@@ -20,40 +20,57 @@ import argparse
 import configparser
 import logging
 import logging.config
+import importlib
 import inspect
-import operator
+import inflection
 import yaml
 
 import numpy as np
 import torch
 import humanize
+import xlsxwriter
 
 import utils
 import utils.train
 
 
-def name(name, variable):
-    return name
+class Name(object):
+    def __call__(self, name, variable):
+        return name
 
 
-def size(name, variable):
-    return 'x'.join(map(str, variable.size()))
+class Size(object):
+    def __call__(self, name, variable):
+        return 'x'.join(map(str, variable.size()))
 
 
-def bytes(name, variable):
-    return variable.numpy().nbytes
+class Bytes(object):
+    def __call__(self, name, variable):
+        return variable.numpy().nbytes
+
+    def format(self, worksheet, num, col):
+        worksheet.conditional_format(1, col, num, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
 
 
-def natural_bytes(name, variable):
-    return humanize.naturalsize(variable.numpy().nbytes)
+class BytesNatural(object):
+    def __call__(self, name, variable):
+        return humanize.naturalsize(variable.numpy().nbytes)
 
 
-def abs_mean(name, variable):
-    return np.mean(np.abs(variable.numpy()))
+class AbsMean(object):
+    def __call__(self, name, variable):
+        return np.mean(np.abs(variable.numpy()))
+
+    def format(self, worksheet, num, col):
+        worksheet.conditional_format(1, col, num, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
 
 
-def min_abs_mean(name, variable):
-    return np.min([np.mean(np.abs(a)) for a in variable.numpy()])
+class MinAbsMean(object):
+    def __call__(self, name, variable):
+        return np.min([np.mean(np.abs(a)) for a in variable.numpy()])
+
+    def format(self, worksheet, num, col):
+        worksheet.conditional_format(1, col, num, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
 
 
 def main():
@@ -67,14 +84,21 @@ def main():
     model_dir = utils.get_model_dir(config)
     path, step, epoch = utils.train.load_model(model_dir)
     state_dict = torch.load(path, map_location=lambda storage, loc: storage)
-    sig = inspect.signature(size)
-    mapper = utils.load_functions(__file__)
-    mapper = [(key, fn) for key, fn in mapper if inspect.signature(fn).parameters == sig.parameters]
-    if not args.nohead:
-        print('\t'.join(map(operator.itemgetter(0), mapper)))
-    for name, variable in state_dict.items():
-        row = (fn(name, variable) for key, fn in mapper)
-        print('\t'.join(map(str, row)))
+    mapper = [(inflection.underscore(name), member()) for name, member in inspect.getmembers(importlib.machinery.SourceFileLoader('', __file__).load_module()) if inspect.isclass(member)]
+    path = os.path.join(model_dir, os.path.basename(os.path.splitext(__file__)[0])) + '.xlsx'
+    with xlsxwriter.Workbook(path, {'strings_to_urls': False}) as workbook:
+        worksheet = workbook.add_worksheet(args.worksheet)
+        for i, (name, variable) in enumerate(state_dict.items()):
+            for j, (key, m) in enumerate(mapper):
+                value = m(name, variable)
+                worksheet.write(1 + i, j, value)
+        for j, (key, m) in enumerate(mapper):
+            worksheet.write(0, j, key)
+            if hasattr(m, 'format'):
+                m.format(worksheet, i, j)
+        worksheet.autofilter(0, 0, i, len(mapper) - 1)
+        worksheet.freeze_panes(1, 0)
+    logging.info(path)
 
 
 def make_args():
@@ -82,6 +106,7 @@ def make_args():
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
     parser.add_argument('--logging', default='logging.yml', help='logging config')
+    parser.add_argument('--worksheet', default='sheet')
     parser.add_argument('--nohead', action='store_true')
     return parser.parse_args()
 
