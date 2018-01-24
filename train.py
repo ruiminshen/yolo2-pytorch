@@ -20,17 +20,16 @@ import argparse
 import configparser
 import logging
 import logging.config
-import threading
 import multiprocessing
-import queue
 import os
 import shutil
-import time
+import io
+import hashlib
 import subprocess
 import pickle
 import traceback
-
 import yaml
+
 import numpy as np
 import torch.autograd
 import torch.cuda
@@ -71,23 +70,22 @@ def ensure_model(model):
     return model
 
 
-class SummaryWorker(threading.Thread):
+class SummaryWorker(multiprocessing.Process):
     def __init__(self, env):
         super(SummaryWorker, self).__init__()
+        self.env = env
         self.config = env.config
-        self.running = True
-        self.queue = queue.Queue()
-        self.writer = SummaryWriter(os.path.join(env.model_dir, env.args.run))
+        self.queue = multiprocessing.Queue()
         try:
-            self.timer_scalar = utils.train.Timer(env.config.getfloat('summary_secs', 'scalar'))
+            self.timer_scalar = utils.train.Timer(env.config.getfloat('summary', 'scalar'))
         except configparser.NoOptionError:
             self.timer_scalar = lambda: False
         try:
-            self.timer_image = utils.train.Timer(env.config.getfloat('summary_secs', 'image'))
+            self.timer_image = utils.train.Timer(env.config.getfloat('summary', 'image'))
         except configparser.NoOptionError:
             self.timer_image = lambda: False
         try:
-            self.timer_histogram = utils.train.Timer(env.config.getfloat('summary_secs', 'histogram'))
+            self.timer_histogram = utils.train.Timer(env.config.getfloat('summary', 'histogram'))
         except configparser.NoOptionError:
             self.timer_histogram = lambda: False
         with open(os.path.expanduser(os.path.expandvars(env.config.get('summary_histogram', 'parameters'))), 'r') as f:
@@ -97,18 +95,19 @@ class SummaryWorker(threading.Thread):
 
     def __call__(self, name, **kwargs):
         if getattr(self, 'timer_' + name)():
-            func = getattr(self, 'summary_' + name)
             kwargs = getattr(self, 'copy_' + name)(**kwargs)
-            self.queue.put((func, kwargs))
+            self.queue.put((name, kwargs))
 
     def stop(self):
-        if self.running:
-            self.running = False
-            self.queue.put((lambda **kwargs: None, {}))
+        self.queue.put((None, {}))
 
     def run(self):
-        while self.running:
-            func, kwargs = self.queue.get()
+        self.writer = SummaryWriter(os.path.join(self.env.model_dir, self.env.args.run))
+        while True:
+            name, kwargs = self.queue.get()
+            if name is None:
+                break
+            func = getattr(self, 'summary_' + name)
             try:
                 func(**kwargs)
             except:
@@ -287,26 +286,28 @@ class Train(object):
         )
         return torch.utils.data.DataLoader(dataset, batch_size=self.args.batch_size * torch.cuda.device_count() if torch.cuda.is_available() else self.args.batch_size, shuffle=True, num_workers=workers, collate_fn=collate_fn, pin_memory=torch.cuda.is_available())
 
-    def restore(self, dnn):
+    def restore(self, model):
         try:
             path, step, epoch = utils.train.load_model(self.model_dir)
-            checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
-            dnn.load_state_dict(checkpoint['dnn'])
+            state_dict = torch.load(path, map_location=lambda storage, loc: storage)
+            model.load_state_dict(state_dict)
         except ValueError:
             step, epoch = 0, 0
-        if self.args.finetune:
-            path = os.path.expanduser(os.path.expandvars(self.args.finetune))
-            if os.path.isdir(path):
-                path, _step, _epoch = utils.train.load_model(path)
-            checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
-            state_dict = dnn.state_dict()
-            ignore = utils.RegexList(self.args.ignore)
-            finetune = [(k, v) for k, v in checkpoint['dnn'].items() if k in state_dict and not ignore(k) and v.size() == state_dict[k].size()]
-            for k, v in finetune:
-                logging.info('fintune %s with size %s' % (k, 'x'.join(map(str, v.size()))))
-            state_dict.update(finetune)
-            dnn.load_state_dict(state_dict)
         return step, epoch
+
+    def finetune(self, model, path):
+        if os.path.isdir(path):
+            path, _step, _epoch = utils.train.load_model(path)
+        _state_dict = torch.load(path, map_location=lambda storage, loc: storage)
+        state_dict = model.state_dict()
+        ignore = utils.RegexList(self.args.ignore)
+        for key, value in state_dict.items():
+            try:
+                if not ignore(key):
+                    state_dict[key] = _state_dict[key]
+            except KeyError:
+                logging.warning('%s not in finetune file %s' % (key, path))
+        model.load_state_dict(state_dict)
 
     def step(self, inference, optimizer, data):
         for key in data:
@@ -343,12 +344,21 @@ class Train(object):
                 inference = model.Inference(self.config, dnn, self.anchors)
                 logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in inference.state_dict().values())))
                 step, epoch = self.restore(dnn)
+                if self.args.finetune:
+                    path = os.path.expanduser(os.path.expandvars(self.args.finetune))
+                    logging.info('finetune from ' + path)
+                    self.finetune(dnn, path)
                 inference = ensure_model(inference)
                 inference.train()
-                optimizer = utils.train.get_optimizer(self.config, self.args.optimizer)(filter(lambda p: p.requires_grad, inference.parameters()), self.args.learning_rate)
-                scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.1)
+                optimizer = eval(self.config.get('train', 'optimizer'))(filter(lambda p: p.requires_grad, inference.parameters()), self.args.learning_rate)
+                try:
+                    scheduler = eval(self.config.get('train', 'scheduler'))(optimizer)
+                except configparser.NoOptionError:
+                    scheduler = None
                 for epoch in range(0 if epoch is None else epoch, self.args.epoch):
-                    scheduler.step(epoch)
+                    if scheduler is not None:
+                        scheduler.step(epoch)
+                        logging.info('epoch=%d, lr=%s' % (epoch, str(scheduler.get_lr())))
                     for data in loader if self.args.quiet else tqdm.tqdm(loader, desc='epoch=%d/%d' % (epoch, self.args.epoch)):
                         kwargs = self.step(inference, optimizer, data)
                         step += 1
@@ -369,21 +379,21 @@ class Train(object):
                 self.save(**kwargs)
             except:
                 traceback.print_exc()
-                with open(os.path.join(self.model_dir, 'data.pkl'), 'wb') as f:
-                    pickle.dump(data, f)
+                try:
+                    with open(os.path.join(self.model_dir, 'data.pkl'), 'wb') as f:
+                        pickle.dump(data, f)
+                except UnboundLocalError:
+                    pass
                 raise
             finally:
                 self.stop()
-
-    def dump_object(self, **kwargs):
-        return dict(dnn=kwargs['dnn'].state_dict(), optimizer=kwargs['optimizer'].state_dict())
 
     def check_nan(self, **kwargs):
         step, loss_total, loss, data = (kwargs[key] for key in 'step, loss_total, loss, data'.split(', '))
         if np.isnan(loss_total.data.cpu()[0]):
             dump_dir = os.path.join(self.model_dir, str(step))
             os.makedirs(dump_dir, exist_ok=True)
-            torch.save(self.dump_object(**kwargs), os.path.join(dump_dir, 'model.pth'))
+            torch.save(kwargs['dnn'].state_dict(), os.path.join(dump_dir, 'model.pth'))
             torch.save(data, os.path.join(dump_dir, 'data.pth'))
             for key in loss:
                 logging.warning('%s=%f' % (key, loss[key].data.cpu()[0]))
@@ -392,7 +402,10 @@ class Train(object):
     def save(self, **kwargs):
         step, epoch = (kwargs[key] for key in 'step, epoch'.split(', '))
         self.check_nan(**kwargs)
-        self.saver(self.dump_object(**kwargs), step, epoch)
+        state_dict = kwargs['dnn'].state_dict()
+        for key in state_dict:
+            state_dict[key] = state_dict[key].cpu()
+        self.saver(state_dict, step, epoch)
 
     def eval(self, **kwargs):
         step, inference = (kwargs[key] for key in 'step, inference'.split(', '))
@@ -402,13 +415,26 @@ class Train(object):
         try:
             e = _eval.Eval(self.args, self.config)
             cls_ap = e()
-            for c in cls_ap:
-                self.summary_worker.writer.add_scalar('ap/' + self.category[c], cls_ap[c], step)
-            self.summary_worker.writer.add_scalar('mean_ap', np.mean(list(cls_ap.values())), step)
-        except Exception as e:
-            logging.warning(e)
+            self.backup_best(cls_ap, e.path)
+        except:
+            traceback.print_exc()
         if torch.cuda.is_available():
             inference.cuda()
+
+    def backup_best(self, cls_ap, path):
+        try:
+            with open(self.model_dir + '.pkl', 'rb') as f:
+                best = np.mean(list(pickle.load(f).values()))
+        except:
+            best = np.finfo(np.float32).min
+        metric = np.mean(list(cls_ap.values()))
+        if metric > best:
+            with open(self.model_dir + '.pkl', 'wb') as f:
+                pickle.dump(cls_ap, f)
+            shutil.copy(path, self.model_dir + '.pth')
+            logging.info('best model (%f) saved into %s.*' % (metric, self.model_dir))
+        else:
+            logging.info('best metric %f >= %f' % (best, metric))
 
 
 def main():
@@ -419,6 +445,10 @@ def main():
         utils.modify_config(config, cmd)
     with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
         logging.config.dictConfig(yaml.load(f))
+    if args.run is None:
+        buffer = io.StringIO()
+        config.write(buffer)
+        args.run = hashlib.md5(buffer.getvalue().encode()).hexdigest()
     logging.info('cd ' + os.getcwd() + ' && ' + subprocess.list2cmdline([sys.executable] + sys.argv))
     train = Train(args, config)
     train()
@@ -432,12 +462,11 @@ def make_args():
     parser.add_argument('-b', '--batch_size', default=16, type=int, help='batch size')
     parser.add_argument('-f', '--finetune')
     parser.add_argument('-i', '--ignore', nargs='+', default=[], help='regex to ignore weights while fintuning')
-    parser.add_argument('-o', '--optimizer', default='adam')
-    parser.add_argument('-lr', '--learning_rate', default=1e-6, type=float, help='learning rate')
+    parser.add_argument('-lr', '--learning_rate', default=1e-3, type=float, help='learning rate')
     parser.add_argument('-e', '--epoch', type=int, default=np.iinfo(np.int).max)
     parser.add_argument('-d', '--delete', action='store_true', help='delete model')
     parser.add_argument('-q', '--quiet', action='store_true', help='quiet mode')
-    parser.add_argument('-r', '--run', default=time.strftime('%Y-%m-%d_%H-%M-%S'), help='the run name in TensorBoard')
+    parser.add_argument('-r', '--run', help='the run name in TensorBoard')
     parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
 

@@ -20,8 +20,8 @@ import argparse
 import configparser
 import logging
 import logging.config
-
 import yaml
+
 import torch.autograd
 import torch.cuda
 import torch.optim
@@ -51,9 +51,12 @@ def main():
     inference = model.Inference(config, dnn, anchors)
     inference.eval()
     logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in inference.state_dict().values())))
-    path, step, epoch = utils.train.load_model(model_dir)
-    checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
-    dnn.load_state_dict(checkpoint['dnn'])
+    path = model_dir + '.pth'
+    if not os.path.exists(path):
+        path, step, epoch = utils.train.load_model(model_dir)
+    state_dict = torch.load(path, map_location=lambda storage, loc: storage)
+    logging.info(path + ' is used')
+    dnn.load_state_dict(state_dict)
     image = torch.autograd.Variable(torch.randn(args.batch_size, 3, height, width))
     path = model_dir + '.onnx'
     logging.info('save ' + path)

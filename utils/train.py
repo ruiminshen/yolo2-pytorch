@@ -23,27 +23,6 @@ import logging
 import torch
 
 
-def get_optimizer(config, name):
-    section = 'optimizer_' + name
-    return {
-        'sgd': lambda params, lr: torch.optim.SGD(
-            params,
-            lr, weight_decay=config.getfloat('optimizer', 'weight_decay'),
-            momentum=config.getfloat(section, 'momentum'),
-        ),
-        'adam': lambda params, lr: torch.optim.Adam(
-            params,
-            lr, weight_decay=config.getfloat('optimizer', 'weight_decay'),
-            betas=tuple(map(float, config.get(section, 'betas').split())), eps=config.getfloat(section, 'eps'),
-        ),
-        'rmsprop': lambda params, lr: torch.optim.RMSprop(
-            params,
-            lr, weight_decay=config.getfloat('optimizer', 'weight_decay'),
-            alpha=config.getfloat(section, 'alpha'), eps=config.getfloat(section, 'eps'),
-        ),
-    }[name]
-
-
 class Timer(object):
     def __init__(self, max, first=True):
         """
@@ -69,7 +48,7 @@ class Timer(object):
             return False
 
 
-def load_model(model_dir, step=None, ext='.pth', ext_epoch='.epoch', map_location=lambda storage, loc: storage, logger=logging.info):
+def load_model(model_dir, step=None, ext='.pth', ext_epoch='.epoch', logger=logging.info):
     """
     Load the latest checkpoint in a model directory.
     :author 申瑞珉 (Ruimin Shen)
@@ -84,17 +63,17 @@ def load_model(model_dir, step=None, ext='.pth', ext_epoch='.epoch', map_locatio
         step, name = max(steps, key=operator.itemgetter(0))
     else:
         name = str(step)
-    path = os.path.join(model_dir, name)
+    prefix = os.path.join(model_dir, name)
     if logger is not None:
-        logger('load ' + path)
+        logger('load %s.*' % prefix)
     try:
-        with open(path + ext_epoch, 'r') as f:
+        with open(prefix + ext_epoch, 'r') as f:
             epoch = int(f.read())
     except (FileNotFoundError, ValueError):
         epoch = None
-    _path = path + ext
-    assert os.path.exists(_path), _path
-    return _path, step, epoch
+    path = prefix + ext
+    assert os.path.exists(path), path
+    return path, step, epoch
 
 
 class Saver(object):
@@ -111,7 +90,7 @@ class Saver(object):
         self.keep = keep
         self.ext = ext
         self.ext_epoch = ext_epoch
-        self.logger = logger
+        self.logger = (lambda s: s) if logger is None else logger
 
     def __call__(self, obj, step, epoch=None):
         """
@@ -122,14 +101,14 @@ class Saver(object):
         :param epoch: Current epoch.
         """
         os.makedirs(self.model_dir, exist_ok=True)
-        path = os.path.join(self.model_dir, str(step))
-        torch.save(obj, path + self.ext)
+        prefix = os.path.join(self.model_dir, str(step))
+        torch.save(obj, prefix + self.ext)
         if epoch is not None:
-            with open(path + self.ext_epoch, 'w') as f:
+            with open(prefix + self.ext_epoch, 'w') as f:
                 f.write(str(epoch))
-        if self.logger is not None:
-            self.logger('model saved into ' + path)
+        self.logger('model saved into %s.*' % prefix)
         self.tidy()
+        return prefix
 
     def tidy(self):
         steps = [(int(n), n) for n, e in map(os.path.splitext, os.listdir(self.model_dir)) if n.isdigit() and e == self.ext]

@@ -23,8 +23,8 @@ import json
 import logging
 import logging.config
 import multiprocessing
-
 import yaml
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -37,7 +37,6 @@ import tqdm
 import humanize
 import pybenchmark
 import tinydb
-import filelock
 import cv2
 
 import transform
@@ -176,9 +175,9 @@ class Eval(object):
         self.loader = self.get_loader()
         self.anchors = torch.from_numpy(utils.get_anchors(config)).contiguous()
         dnn = utils.parse_attr(config.get('model', 'dnn'))(config, self.anchors, len(self.category))
-        path, self.step, self.epoch = utils.train.load_model(self.model_dir)
-        checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
-        dnn.load_state_dict(checkpoint['dnn'])
+        self.path, self.step, self.epoch = utils.train.load_model(self.model_dir)
+        state_dict = torch.load(self.path, map_location=lambda storage, loc: storage)
+        dnn.load_state_dict(state_dict)
         logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in dnn.state_dict().values())))
         self.inference = model.Inference(config, dnn, self.anchors)
         self.inference.eval()
@@ -293,11 +292,27 @@ class Eval(object):
             row = dict([(key, fn(self, cls_ap=cls_ap)) for key, fn in self.mapper])
             db.insert(row)
 
-    def save_tsv(self, path, path_tsv):
+    def save_xlsx(self, path, path_xlsx, sheet='sheet', sort='timestamp'):
         with open(path, 'r') as f:
             data = json.load(f)
-        df = pd.read_json(json.dumps(data['_default']), orient='index')
+        df = pd.read_json(json.dumps(data['_default']), orient='index', convert_dates=False)
         df = df[sorted(df)]
+        if sort is not None:
+            df = df.sort_values(sort)
+        writer = pd.ExcelWriter(path_xlsx, engine='xlsxwriter')
+        df.to_excel(writer, sheet, index=False)
+        worksheet = writer.sheets[sheet]
+        worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
+        worksheet.freeze_panes(1, 0)
+        writer.save()
+
+    def save_tsv(self, path, path_tsv, sort='timestamp'):
+        with open(path, 'r') as f:
+            data = json.load(f)
+        df = pd.read_json(json.dumps(data['_default']), orient='index', convert_dates=False)
+        df = df[sorted(df)]
+        if sort is not None:
+            df = df.sort_values(sort)
         df.to_csv(path_tsv, index=False, sep='\t')
 
     def logging(self, cls_ap):
@@ -310,7 +325,7 @@ class Eval(object):
         cls_ap = self.merge_ap(cls_num, cls_score, cls_tp)
         path = utils.get_eval_db(self.config)
         self.save_db(cls_ap, path)
-        self.save_tsv(path, os.path.splitext(path)[0] + '.tsv')
+        self.save_xlsx(path, os.path.splitext(path)[0] + '.xlsx')
         self.logging(cls_ap)
         return cls_ap
 

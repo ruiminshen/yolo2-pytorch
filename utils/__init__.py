@@ -95,7 +95,7 @@ def load_config(config, paths):
 
 
 def modify_config(config, cmd):
-    var, value = cmd.split('=')
+    var, value = cmd.split('=', 1)
     section, option = var.split('/')
     if value:
         config.set(section, option, value)

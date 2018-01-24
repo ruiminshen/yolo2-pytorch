@@ -24,6 +24,7 @@ import importlib
 import pickle
 import random
 import shutil
+import yaml
 
 import utils
 
@@ -66,6 +67,7 @@ def make_args():
     parser.add_argument('-p', '--phase', nargs='+', default=['train', 'val', 'test'])
     parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
+
 
 if __name__ == '__main__':
     main()

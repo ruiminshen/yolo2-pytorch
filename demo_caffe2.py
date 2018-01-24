@@ -21,8 +21,8 @@ import configparser
 import logging
 import logging.config
 import hashlib
-
 import yaml
+
 from caffe2.proto import caffe2_pb2
 from caffe2.python import workspace
 import cv2

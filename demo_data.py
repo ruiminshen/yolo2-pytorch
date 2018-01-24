@@ -21,8 +21,8 @@ import configparser
 import logging
 import logging.config
 import multiprocessing
-
 import yaml
+
 import numpy as np
 import torch.utils.data
 import matplotlib.pyplot as plt

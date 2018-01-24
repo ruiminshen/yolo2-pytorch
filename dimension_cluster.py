@@ -20,8 +20,8 @@ import argparse
 import configparser
 import logging
 import logging.config
-
 import yaml
+
 import numpy as np
 import nltk.cluster.kmeans
 
