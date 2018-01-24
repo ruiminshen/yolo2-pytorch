@@ -120,8 +120,3 @@ def abs_mean(data, dtype=np.float32):
 def image_size(path):
     with Image.open(path) as image:
         return image.size
-
-
-def load_functions(path, name=''):
-    module = importlib.machinery.SourceFileLoader(name, path).load_module()
-    return [(name, fn) for name, fn in inspect.getmembers(module) if inspect.isfunction(fn)]

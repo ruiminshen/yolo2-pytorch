@@ -23,6 +23,8 @@ import json
 import logging
 import logging.config
 import multiprocessing
+import importlib
+import inspect
 import yaml
 
 import numpy as np
@@ -190,7 +192,7 @@ class Eval(object):
         else:
             logging.warning('training config (%s) not found' % path)
         self.now = datetime.datetime.now()
-        self.mapper = utils.load_functions(self.config.get('eval', 'mapper'))
+        self.mapper = [(name, member) for name, member in inspect.getmembers(importlib.machinery.SourceFileLoader('', self.config.get('eval', 'mapper')).load_module()) if inspect.isfunction(member)]
 
     def get_loader(self):
         paths = [os.path.join(self.cache_dir, phase + '.pkl') for phase in self.config.get('eval', 'phase').split()]
