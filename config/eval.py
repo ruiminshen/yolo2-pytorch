@@ -23,95 +23,145 @@ import humanize
 import pybenchmark
 
 
-def timestamp(env, **kwargs):
-    return float(env.now.timestamp())
+class Timestamp(object):
+    def __call__(self, env, **kwargs):
+        return float(env.now.timestamp())
 
 
-def time(env, **kwargs):
-    return env.now.strftime('%Y-%m-%d %H:%M:%S')
+class Time(object):
+    def __call__(self, env, **kwargs):
+        return env.now.strftime('%Y-%m-%d %H:%M:%S')
+
+    def get_format(self, workbook, worksheet):
+        return workbook.add_format({'num_format': 'yyyy-mm-dd hh:mm:ss'})
 
 
-def step(env, **kwargs):
-    return env.step
+class Step(object):
+    def __call__(self, env, **kwargs):
+        return env.step
 
 
-def epoch(env, **kwargs):
-    return env.epoch
+class Epoch(object):
+    def __call__(self, env, **kwargs):
+        return env.epoch
 
 
-def model(env, **kwargs):
-    return env.config.get('model', 'dnn')
+class Model(object):
+    def __call__(self, env, **kwargs):
+        return env.config.get('model', 'dnn')
 
 
-def size_dnn(env, **kwargs):
-    return sum(var.cpu().numpy().nbytes for var in env.inference.state_dict().values())
+class SizeDnn(object):
+    def __call__(self, env, **kwargs):
+        return sum(var.cpu().numpy().nbytes for var in env.inference.state_dict().values())
+
+    def format(self, workbook, worksheet, num, col):
+        worksheet.conditional_format(1, col, num + 1, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
 
 
-def size_dnn_nature(env, **kwargs):
-    return humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in env.inference.state_dict().values()))
+class SizeDnnNature(object):
+    def __call__(self, env, **kwargs):
+        return humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in env.inference.state_dict().values()))
 
 
-def time_inference(env, **kwargs):
-    return pybenchmark.stats['inference']['time']
+class TimeInference(object):
+    def __call__(self, env, **kwargs):
+        return pybenchmark.stats['inference']['time']
+
+    def format(self, workbook, worksheet, num, col):
+        worksheet.conditional_format(1, col, num + 1, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
 
 
-def root(env, **kwargs):
-    return os.path.basename(env.config.get('config', 'root'))
+class Root(object):
+    def __call__(self, env, **kwargs):
+        return os.path.basename(env.config.get('config', 'root'))
 
 
-def cache_name(env, **kwargs):
-    return env.config.get('cache', 'name')
+class CacheName(object):
+    def __call__(self, env, **kwargs):
+        return env.config.get('cache', 'name')
 
 
-def model_name(env, **kwargs):
-    return env.config.get('model', 'name')
+class ModelName(object):
+    def __call__(self, env, **kwargs):
+        return env.config.get('model', 'name')
 
 
-def category(env, **kwargs):
-    return env.config.get('cache', 'category')
+class Category(object):
+    def __call__(self, env, **kwargs):
+        return env.config.get('cache', 'category')
 
 
-def dataset_size(env, **kwargs):
-    return len(env.loader.dataset)
+class DatasetSize(object):
+    def __call__(self, env, **kwargs):
+        return len(env.loader.dataset)
+
+    def format(self, workbook, worksheet, num, col):
+        worksheet.conditional_format(1, col, num + 1, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
 
 
-def detect_threshold(env, **kwargs):
-    return env.config.getfloat('detect', 'threshold')
+class DetectThreshold(object):
+    def __call__(self, env, **kwargs):
+        try:
+            self.color = '#FFC7CE'
+            return env.config.getfloat('detect', 'threshold')
+        except:
+            self.color = '#9C0006'
+            return env.config.getfloat('detect', 'threshold_cls')
+
+    def format(self, workbook, worksheet, num, col):
+        worksheet.conditional_format(1, col, num + 1, col, {'type': 'data_bar', 'bar_color': self.color})
 
 
-def detect_overlap(env, **kwargs):
-    return env.config.getfloat('detect', 'overlap')
+class DetectOverlap(object):
+    def __call__(self, env, **kwargs):
+        return env.config.getfloat('detect', 'overlap')
+
+    def format(self, workbook, worksheet, num, col):
+        worksheet.conditional_format(1, col, num + 1, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
 
 
-def eval_iou(env, **kwargs):
-    return env.config.getfloat('eval', 'iou')
+class EvalIou(object):
+    def __call__(self, env, **kwargs):
+        return env.config.getfloat('eval', 'iou')
+
+    def format(self, workbook, worksheet, num, col):
+        worksheet.conditional_format(1, col, num + 1, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
 
 
-def eval_mean_ap(env, **kwargs):
-    return np.mean(list(kwargs['cls_ap'].values()))
+class EvalMeanAp(object):
+    def __call__(self, env, **kwargs):
+        return np.mean(list(kwargs['cls_ap'].values()))
+
+    def format(self, workbook, worksheet, num, col):
+        worksheet.conditional_format(1, col, num + 1, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
 
 
-def eval_ap(env, **kwargs):
-    cls_ap = kwargs['cls_ap']
-    return ', '.join(['%s=%f' % (env.category[c], cls_ap[c]) for c in sorted(cls_ap.keys())])
+class EvalAp(object):
+    def __call__(self, env, **kwargs):
+        cls_ap = kwargs['cls_ap']
+        return ', '.join(['%s=%f' % (env.category[c], cls_ap[c]) for c in sorted(cls_ap.keys())])
 
 
-def hparam(env, **kwargs):
-    try:
-        return ', '.join([option + '=' + value for option, value in env._config.items('hparam')])
-    except AttributeError:
-        return None
+class Hparam(object):
+    def __call__(self, env, **kwargs):
+        try:
+            return ', '.join([option + '=' + value for option, value in env._config.items('hparam')])
+        except AttributeError:
+            return None
 
 
-def optimizer(env, **kwargs):
-    try:
-        return env._config.get('train', 'optimizer')
-    except (AttributeError, configparser.NoOptionError):
-        return None
+class Optimizer(object):
+    def __call__(self, env, **kwargs):
+        try:
+            return env._config.get('train', 'optimizer')
+        except (AttributeError, configparser.NoOptionError):
+            return None
 
 
-def scheduler(env, **kwargs):
-    try:
-        return env._config.get('train', 'scheduler')
-    except (AttributeError, configparser.NoOptionError):
-        return None
+class Scheduler(object):
+    def __call__(self, env, **kwargs):
+        try:
+            return env._config.get('train', 'scheduler')
+        except (AttributeError, configparser.NoOptionError):
+            return None

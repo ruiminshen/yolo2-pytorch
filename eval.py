@@ -25,6 +25,8 @@ import logging.config
 import multiprocessing
 import importlib
 import inspect
+import inflection
+import hashlib
 import yaml
 
 import numpy as np
@@ -39,6 +41,7 @@ import tqdm
 import humanize
 import pybenchmark
 import tinydb
+import xlsxwriter
 import cv2
 
 import transform
@@ -192,7 +195,7 @@ class Eval(object):
         else:
             logging.warning('training config (%s) not found' % path)
         self.now = datetime.datetime.now()
-        self.mapper = [(name, member) for name, member in inspect.getmembers(importlib.machinery.SourceFileLoader('', self.config.get('eval', 'mapper')).load_module()) if inspect.isfunction(member)]
+        self.mapper = [(inflection.underscore(name), member()) for name, member in inspect.getmembers(importlib.machinery.SourceFileLoader('', self.config.get('eval', 'mapper')).load_module()) if inspect.isclass(member)]
 
     def get_loader(self):
         paths = [os.path.join(self.cache_dir, phase + '.pkl') for phase in self.config.get('eval', 'phase').split()]
@@ -215,7 +218,7 @@ class Eval(object):
         try:
             score = iou
             mask = score > self.config.getfloat('detect', 'threshold')
-        except configparser.NoOptionError:
+        except:
             score = prob
             mask = score > self.config.getfloat('detect', 'threshold_cls')
         _mask = torch.unsqueeze(mask, -1).repeat(1, 2)  # PyTorch's bug
@@ -230,6 +233,25 @@ class Eval(object):
         if self.config.getboolean('eval', 'debug'):
             self.debug(data_yx_min, data_yx_max, yx_min, yx_max, c, tp, path)
         return score, tp
+
+    def debug_data(self, data):
+        for i, t in enumerate(torch.unbind(data['image'])):
+            a = t.cpu().numpy()
+            logging.info('image%d: %f %s' % (i, utils.abs_mean(a), hashlib.md5(a.tostring()).hexdigest()))
+        for i, t in enumerate(torch.unbind(data['tensor'])):
+            a = t.cpu().numpy()
+            logging.info('tensor%d: %f %s' % (i, utils.abs_mean(a), hashlib.md5(a.tostring()).hexdigest()))
+
+    def debug_pred(self, pred):
+        for i, t in enumerate(torch.unbind(pred['iou'])):
+            a = t.cpu().numpy()
+            logging.info('iou%d: %f %s' % (i, utils.abs_mean(a), hashlib.md5(a.tostring()).hexdigest()))
+        for i, t in enumerate(torch.unbind(pred['center_offset'])):
+            a = t.cpu().numpy()
+            logging.info('center_offset%d: %f %s' % (i, utils.abs_mean(a), hashlib.md5(a.tostring()).hexdigest()))
+        for i, t in enumerate(torch.unbind(pred['size_norm'])):
+            a = t.cpu().numpy()
+            logging.info('size_norm%d: %f %s' % (i, utils.abs_mean(a), hashlib.md5(a.tostring()).hexdigest()))
 
     def debug(self, data_yx_min, data_yx_max, yx_min, yx_max, c, tp, path):
         canvas = cv2.imread(path)
@@ -255,7 +277,7 @@ class Eval(object):
                 t = data[key]
                 if torch.is_tensor(t):
                     data[key] = utils.ensure_device(t)
-            tensor = torch.autograd.Variable(data['tensor'])
+            tensor = torch.autograd.Variable(data['tensor'], volatile=True)
             batch_size = tensor.size(0)
             pred = pybenchmark.profile('inference')(model._inference)(self.inference, tensor)
             _prob, pred['cls'] = conv_logits(pred)
@@ -263,6 +285,9 @@ class Eval(object):
             pred['prob'] = pred['iou'] * _prob
             for key in pred:
                 pred[key] = pred[key].data
+            if self.config.getboolean('eval', 'debug'):
+                self.debug_data(data)
+                self.debug_pred(pred)
             norm_bbox(data, pred)
             for path, size, difficult, image, data_yx_min, data_yx_max, data_cls, yx_min, yx_max, iou, prob, cls in zip(*(data[key] for key in 'path, size, difficult'.split(', ')), *(torch.unbind(data[key]) for key in 'image, yx_min, yx_max, cls'.split(', ')), *(torch.unbind(pred[key].view(batch_size, -1, 2)) for key in 'yx_min, yx_max'.split(', ')), *(torch.unbind(pred[key].view(batch_size, -1)) for key in 'iou, prob, cls'.split(', '))):
                 data_yx_min, data_yx_max, data_cls = filter_valid(data_yx_min, data_yx_max, data_cls, difficult)
@@ -294,28 +319,21 @@ class Eval(object):
             row = dict([(key, fn(self, cls_ap=cls_ap)) for key, fn in self.mapper])
             db.insert(row)
 
-    def save_xlsx(self, path, path_xlsx, sheet='sheet', sort='timestamp'):
-        with open(path, 'r') as f:
-            data = json.load(f)
-        df = pd.read_json(json.dumps(data['_default']), orient='index', convert_dates=False)
-        df = df[sorted(df)]
-        if sort is not None:
-            df = df.sort_values(sort)
-        writer = pd.ExcelWriter(path_xlsx, engine='xlsxwriter')
-        df.to_excel(writer, sheet, index=False)
-        worksheet = writer.sheets[sheet]
-        worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
-        worksheet.freeze_panes(1, 0)
-        writer.save()
-
-    def save_tsv(self, path, path_tsv, sort='timestamp'):
-        with open(path, 'r') as f:
-            data = json.load(f)
-        df = pd.read_json(json.dumps(data['_default']), orient='index', convert_dates=False)
-        df = df[sorted(df)]
-        if sort is not None:
-            df = df.sort_values(sort)
-        df.to_csv(path_tsv, index=False, sep='\t')
+    def save_xlsx(self, df, path, worksheet='worksheet'):
+        with xlsxwriter.Workbook(path, {'strings_to_urls': False, 'nan_inf_to_errors': True}) as workbook:
+            worksheet = workbook.add_worksheet(worksheet)
+            for j, (key, m) in enumerate(self.mapper):
+                worksheet.write(0, j, key)
+                try:
+                    args = [m.get_format(workbook, worksheet)]
+                except:
+                    args = []
+                for i, value in enumerate(df[key]):
+                    worksheet.write(1 + i, j, value, *args)
+                if hasattr(m, 'format'):
+                    m.format(workbook, worksheet, i, j)
+            worksheet.autofilter(0, 0, i, len(self.mapper) - 1)
+            worksheet.freeze_panes(1, 0)
 
     def logging(self, cls_ap):
         for c in cls_ap:
@@ -327,7 +345,14 @@ class Eval(object):
         cls_ap = self.merge_ap(cls_num, cls_score, cls_tp)
         path = utils.get_eval_db(self.config)
         self.save_db(cls_ap, path)
-        self.save_xlsx(path, os.path.splitext(path)[0] + '.xlsx')
+        with open(path, 'r') as f:
+            df = pd.read_json(json.dumps(json.load(f)['_default']), orient='index', convert_dates=False)
+        df = df[sorted(df)]
+        try:
+            df = df.sort_values(self.config.get('eval', 'sort'))
+        except configparser.NoOptionError:
+            pass
+        self.save_xlsx(df, os.path.splitext(path)[0] + '.xlsx')
         self.logging(cls_ap)
         return cls_ap
 
