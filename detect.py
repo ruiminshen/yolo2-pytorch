@@ -134,7 +134,7 @@ class Detect(object):
         try:
             pred['score'] = pred['iou']
             mask = pred['score'] > self.config.getfloat('detect', 'threshold')
-        except configparser.NoOptionError:
+        except:
             pred['score'] = pred['prob']
             mask = pred['score'] > self.config.getfloat('detect', 'threshold_cls')
         mask = mask.detach() # PyTorch's bug
@@ -147,7 +147,7 @@ class Detect(object):
     def __call__(self):
         image_bgr = self.get_image()
         tensor = self.conv_tensor(image_bgr)
-        pred = pybenchmark.profile('inference')(model._inference)(self.inference, torch.autograd.Variable(tensor))
+        pred = pybenchmark.profile('inference')(model._inference)(self.inference, torch.autograd.Variable(tensor, volatile=True))
         rows, cols = pred['feature'].size()[-2:]
         _prob, pred['cls'] = conv_logits(pred)
         pred['prob'] = pred['iou'] * _prob

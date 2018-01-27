@@ -57,7 +57,7 @@ def main():
     state_dict = torch.load(path, map_location=lambda storage, loc: storage)
     logging.info(path + ' is used')
     dnn.load_state_dict(state_dict)
-    image = torch.autograd.Variable(torch.randn(args.batch_size, 3, height, width))
+    image = torch.autograd.Variable(torch.randn(args.batch_size, 3, height, width), volatile=True)
     path = model_dir + '.onnx'
     logging.info('save ' + path)
     torch.onnx.export(dnn, image, path, export_params=True, verbose=args.verbose) # PyTorch's bug

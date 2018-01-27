@@ -63,7 +63,7 @@ class Analyzer(object):
         if torch.cuda.is_available():
             self.dnn.cuda()
         self.height, self.width = tuple(map(int, config.get('image', 'size').split()))
-        output = self.dnn(torch.autograd.Variable(utils.ensure_device(torch.zeros(1, 3, self.height, self.width))))
+        output = self.dnn(torch.autograd.Variable(utils.ensure_device(torch.zeros(1, 3, self.height, self.width)), volatile=True))
         _, _, self.rows, self.cols = output.size()
         self.i, self.j = self.rows // 2, self.cols // 2
         self.output = output[:, :, self.i, self.j]
@@ -83,7 +83,7 @@ class Analyzer(object):
                 y, x = torch.unbind(_yx)
                 tensor[i, :, y, x] = 1
             tensor = utils.ensure_device(tensor)
-            output = self.dnn(torch.autograd.Variable(tensor))
+            output = self.dnn(torch.autograd.Variable(tensor, volatile=True))
             output = output[:, :, self.i, self.j]
             cmp = output == self.output
             cmp = torch.prod(cmp, -1).data
