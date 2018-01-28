@@ -195,7 +195,7 @@ class Eval(object):
         else:
             logging.warning('training config (%s) not found' % path)
         self.now = datetime.datetime.now()
-        self.mapper = [(inflection.underscore(name), member()) for name, member in inspect.getmembers(importlib.machinery.SourceFileLoader('', self.config.get('eval', 'mapper')).load_module()) if inspect.isclass(member)]
+        self.mapper = dict([(inflection.underscore(name), member()) for name, member in inspect.getmembers(importlib.machinery.SourceFileLoader('', self.config.get('eval', 'mapper')).load_module()) if inspect.isclass(member)])
 
     def get_loader(self):
         paths = [os.path.join(self.cache_dir, phase + '.pkl') for phase in self.config.get('eval', 'phase').split()]
@@ -316,20 +316,24 @@ class Eval(object):
 
     def save_db(self, cls_ap, path):
         with tinydb.TinyDB(path) as db:
-            row = dict([(key, fn(self, cls_ap=cls_ap)) for key, fn in self.mapper])
+            row = dict([(key, fn(self, cls_ap=cls_ap)) for key, fn in self.mapper.items()])
             db.insert(row)
 
     def save_xlsx(self, df, path, worksheet='worksheet'):
         with xlsxwriter.Workbook(path, {'strings_to_urls': False, 'nan_inf_to_errors': True}) as workbook:
             worksheet = workbook.add_worksheet(worksheet)
-            for j, (key, m) in enumerate(self.mapper):
+            for j, key in enumerate(df):
                 worksheet.write(0, j, key)
                 try:
-                    args = [m.get_format(workbook, worksheet)]
-                except:
-                    args = []
+                    m = self.mapper[key]
+                except (KeyError, AttributeError):
+                    m = None
+                if hasattr(m, 'get_format'):
+                    fmt = m.get_format(workbook, worksheet)
+                else:
+                    fmt = None
                 for i, value in enumerate(df[key]):
-                    worksheet.write(1 + i, j, value, *args)
+                    worksheet.write(1 + i, j, value, fmt)
                 if hasattr(m, 'format'):
                     m.format(workbook, worksheet, i, j)
             worksheet.autofilter(0, 0, i, len(self.mapper) - 1)
