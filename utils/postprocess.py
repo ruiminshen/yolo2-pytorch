@@ -20,13 +20,13 @@ import torch
 import utils.iou.torch
 
 
-def nms(yx_min, yx_max, score, overlap=0.5, limit=200):
+def nms(score, yx_min, yx_max, overlap=0.5, limit=200):
     """
     Filtering the overlapping (IoU > overlap threshold) bounding boxes according to the score (in descending order).
     :author 申瑞珉 (Ruimin Shen)
+    :param score: The scores of the list (size [N]) of bounding boxes.
     :param yx_min: The top left coordinates (y, x) of the list (size [N, 2]) of bounding boxes.
     :param yx_max: The bottom right coordinates (y, x) of the list (size [N, 2]) of bounding boxes.
-    :param score: The scores of the list (size [N]) of bounding boxes.
     :param overlap: The IoU threshold.
     :param limit: Limits the number of results.
     :return: The indices of the selected bounding boxes.

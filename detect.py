@@ -40,15 +40,44 @@ import utils.train
 import utils.visualize
 
 
-def conv_logits(pred):
+def get_logits(pred):
     if 'logits' in pred:
-        logits = pred['logits'].contiguous()
-        prob, cls = torch.max(F.softmax(logits, -1), -1)
+        return pred['logits'].contiguous()
     else:
         size = pred['iou'].size()
-        prob = torch.autograd.Variable(utils.ensure_device(torch.ones(*size)))
-        cls = torch.autograd.Variable(utils.ensure_device(torch.zeros(*size).int()))
-    return prob, cls
+        return torch.autograd.Variable(utils.ensure_device(torch.ones(*size, 1)))
+
+
+def filter_visible(config, iou, yx_min, yx_max, prob):
+    prob_cls, cls = torch.max(prob, -1)
+    if config.getboolean('detect', 'fix'):
+        mask = (iou * prob_cls) > config.getfloat('detect', 'threshold_cls')
+    else:
+        mask = iou > config.getfloat('detect', 'threshold')
+    iou, prob_cls, cls = (t[mask].view(-1) for t in (iou, prob_cls, cls))
+    _mask = torch.unsqueeze(mask, -1).repeat(1, 2)  # PyTorch's bug
+    yx_min, yx_max = (t[_mask].view(-1, 2) for t in (yx_min, yx_max))
+    num = prob.size(-1)
+    _mask = torch.unsqueeze(mask, -1).repeat(1, num)  # PyTorch's bug
+    prob = prob[_mask].view(-1, num)
+    return iou, yx_min, yx_max, prob, prob_cls, cls
+
+
+def postprocess(config, iou, yx_min, yx_max, prob):
+    iou, yx_min, yx_max, prob, prob_cls, cls = filter_visible(config, iou, yx_min, yx_max, prob)
+    keep = pybenchmark.profile('nms')(utils.postprocess.nms)(iou, yx_min, yx_max, config.getfloat('detect', 'overlap'))
+    if keep:
+        keep = utils.ensure_device(torch.LongTensor(keep))
+        iou, yx_min, yx_max, prob, prob_cls, cls = (t[keep] for t in (iou, yx_min, yx_max, prob, prob_cls, cls))
+        if config.getboolean('detect', 'fix'):
+            score = torch.unsqueeze(iou, -1) * prob
+            mask = score > config.getfloat('detect', 'threshold_cls')
+            indices, cls = torch.unbind(mask.nonzero(), -1)
+            yx_min, yx_max = (t[indices] for t in (yx_min, yx_max))
+            score = score[mask]
+        else:
+            score = iou
+        return iou, yx_min, yx_max, cls, score
 
 
 class Detect(object):
@@ -61,9 +90,9 @@ class Detect(object):
         self.draw_bbox = utils.visualize.DrawBBox(config, self.category)
         self.anchors = torch.from_numpy(utils.get_anchors(config)).contiguous()
         self.height, self.width = tuple(map(int, config.get('image', 'size').split()))
-        self.dnn = utils.parse_attr(config.get('model', 'dnn'))(config, self.anchors, len(self.category))
-        path, step, epoch = utils.train.load_model(self.model_dir)
-        state_dict = torch.load(path, map_location=lambda storage, loc: storage)
+        self.path, self.step, self.epoch = utils.train.load_model(self.model_dir)
+        state_dict = torch.load(self.path, map_location=lambda storage, loc: storage)
+        self.dnn = utils.parse_attr(config.get('model', 'dnn'))(model.ConfigChannels(config, state_dict), self.anchors, len(self.category))
         self.dnn.load_state_dict(state_dict)
         self.inference = model.Inference(config, self.dnn, self.anchors)
         self.inference.eval()
@@ -130,34 +159,25 @@ class Detect(object):
         tensor = self.transform_tensor(image)
         return utils.ensure_device(tensor.unsqueeze(0))
 
-    def filter_visible(self, pred):
-        try:
-            pred['score'] = pred['iou']
-            mask = pred['score'] > self.config.getfloat('detect', 'threshold')
-        except:
-            pred['score'] = pred['prob']
-            mask = pred['score'] > self.config.getfloat('detect', 'threshold_cls')
-        mask = mask.detach() # PyTorch's bug
-        _mask = torch.unsqueeze(mask, -1)
-        for key in 'yx_min, yx_max'.split(', '):
-            pred[key] = pred[key][_mask].view(-1, 2)
-        for key in 'cls, score'.split(', '):
-            pred[key] = pred[key][mask]
-
     def __call__(self):
         image_bgr = self.get_image()
         tensor = self.conv_tensor(image_bgr)
         pred = pybenchmark.profile('inference')(model._inference)(self.inference, torch.autograd.Variable(tensor, volatile=True))
         rows, cols = pred['feature'].size()[-2:]
-        _prob, pred['cls'] = conv_logits(pred)
-        pred['prob'] = pred['iou'] * _prob
-        self.filter_visible(pred)
-        keep = pybenchmark.profile('nms')(utils.postprocess.nms)(*(pred[key].data for key in 'yx_min, yx_max, score'.split(', ')), self.config.getfloat('detect', 'overlap'))
+        iou = pred['iou'].data.contiguous().view(-1)
+        yx_min, yx_max = (pred[key].data.view(-1, 2) for key in 'yx_min, yx_max'.split(', '))
+        logits = get_logits(pred)
+        prob = F.softmax(logits, -1).data.view(-1, logits.size(-1))
+        ret = postprocess(self.config, iou, yx_min, yx_max, prob)
         image_result = image_bgr.copy()
-        if keep:
-            yx_min, yx_max, cls = (pred[key].data.cpu().numpy()[keep] for key in 'yx_min, yx_max, cls'.split(', '))
-            scale = np.array(image_result.shape[:2], np.float32) / [rows, cols]
-            yx_min, yx_max = ((a * scale).astype(np.int) for a in (yx_min, yx_max))
+        if ret is not None:
+            iou, yx_min, yx_max, cls, score = ret
+            try:
+                scale = self.scale
+            except AttributeError:
+                scale = utils.ensure_device(torch.from_numpy(np.array(image_result.shape[:2], np.float32) / np.array([rows, cols], np.float32)))
+                self.scale = scale
+            yx_min, yx_max = ((t * scale).cpu().numpy().astype(np.int) for t in (yx_min, yx_max))
             image_result = self.draw_bbox(image_result, yx_min, yx_max, cls)
         cv2.imshow('detection', image_result)
         if self.args.output:

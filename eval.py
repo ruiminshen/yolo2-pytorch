@@ -51,6 +51,7 @@ import utils.iou.torch
 import utils.postprocess
 import utils.train
 import utils.visualize
+from detect import get_logits, postprocess
 
 
 def _matching(positive, index):
@@ -120,28 +121,20 @@ def average_precision(config, tp, num, dtype=np.float):
     return voc_ap(rec, prec, config.getboolean('eval', 'metric07'))
 
 
-def norm_bbox(data, pred, keys='yx_min, yx_max'):
-    size, image = (data[key] for key in 'size, image'.split(', '))
-    _size = size.float()
-    height, width = image.size()[1:3]
-    scale = _size.view(-1, 1, 2) / utils.ensure_device(torch.from_numpy(np.reshape(np.array([height, width], dtype=np.float32), [1, 1, 2])))
-    for key in keys.split(', '):
-        data[key] = data[key] * scale
+def norm_bbox_data(data, keys='yx_min, yx_max'.split(', ')):
+    height, width = data['image'].size()[1:3]
+    scale = utils.ensure_device(torch.from_numpy(np.reshape(np.array([height, width], dtype=np.float32), [1, 1, 2])))
+    for key in keys:
+        data[key] = data[key] / scale
+    return keys
+
+
+def norm_bbox_pred(pred, keys='yx_min, yx_max'.split(', ')):
     rows, cols = pred['feature'].size()[-2:]
-    scale = _size.view(-1, 1, 1, 2) / utils.ensure_device(torch.from_numpy(np.reshape(np.array([rows, cols], dtype=np.float32), [1, 1, 1, 2])))
-    for key in keys.split(', '):
-        pred[key] = pred[key] * scale
-
-
-def conv_logits(pred):
-    if 'logits' in pred:
-        logits = pred['logits'].contiguous()
-        prob, cls = torch.max(F.softmax(logits, -1), -1)
-    else:
-        size = pred['iou'].size()
-        prob = torch.autograd.Variable(utils.ensure_device(torch.ones(*size)))
-        cls = torch.autograd.Variable(utils.ensure_device(torch.zeros(*size).int()))
-    return prob, cls
+    scale = utils.ensure_device(torch.from_numpy(np.reshape(np.array([rows, cols], dtype=np.float32), [1, 1, 1, 2])))
+    for key in keys:
+        pred[key] = pred[key] / scale
+    return keys
 
 
 def filter_valid(yx_min, yx_max, cls, difficult):
@@ -179,9 +172,9 @@ class Eval(object):
         self.draw_bbox = utils.visualize.DrawBBox(config, self.category)
         self.loader = self.get_loader()
         self.anchors = torch.from_numpy(utils.get_anchors(config)).contiguous()
-        dnn = utils.parse_attr(config.get('model', 'dnn'))(config, self.anchors, len(self.category))
         self.path, self.step, self.epoch = utils.train.load_model(self.model_dir)
         state_dict = torch.load(self.path, map_location=lambda storage, loc: storage)
+        dnn = utils.parse_attr(config.get('model', 'dnn'))(model.ConfigChannels(config, state_dict), self.anchors, len(self.category))
         dnn.load_state_dict(state_dict)
         logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in dnn.state_dict().values())))
         self.inference = model.Inference(config, dnn, self.anchors)
@@ -214,24 +207,12 @@ class Eval(object):
         )
         return torch.utils.data.DataLoader(dataset, batch_size=self.args.batch_size, num_workers=workers, collate_fn=collate_fn)
 
-    def filter_visible(self, yx_min, yx_max, iou, prob, cls):
-        try:
-            score = iou
-            mask = score > self.config.getfloat('detect', 'threshold')
-        except:
-            score = prob
-            mask = score > self.config.getfloat('detect', 'threshold_cls')
-        _mask = torch.unsqueeze(mask, -1).repeat(1, 2)  # PyTorch's bug
-        yx_min, yx_max = (t[_mask].view(-1, 2) for t in (yx_min, yx_max))
-        cls, score = (t[mask].view(-1) for t in (cls, score))
-        return yx_min, yx_max, cls, score
-
     def filter_cls(self, c, path, data_yx_min, data_yx_max, data_cls, yx_min, yx_max, cls, score):
         data_yx_min, data_yx_max = filter_cls_data(data_yx_min, data_yx_max, data_cls == c)
         yx_min, yx_max, score = filter_cls_pred(yx_min, yx_max, score, cls == c)
         tp = pybenchmark.profile('matching')(matching)(data_yx_min, data_yx_max, yx_min, yx_max, self.config.getfloat('eval', 'iou'))
         if self.config.getboolean('eval', 'debug'):
-            self.debug(data_yx_min, data_yx_max, yx_min, yx_max, c, tp, path)
+            self.debug_visualize(data_yx_min, data_yx_max, yx_min, yx_max, c, tp, path)
         return score, tp
 
     def debug_data(self, data):
@@ -252,14 +233,19 @@ class Eval(object):
         for i, t in enumerate(torch.unbind(pred['size_norm'])):
             a = t.cpu().numpy()
             logging.info('size_norm%d: %f %s' % (i, utils.abs_mean(a), hashlib.md5(a.tostring()).hexdigest()))
+        for i, t in enumerate(torch.unbind(pred['logits'])):
+            a = t.cpu().numpy()
+            logging.info('logits%d: %f %s' % (i, utils.abs_mean(a), hashlib.md5(a.tostring()).hexdigest()))
 
-    def debug(self, data_yx_min, data_yx_max, yx_min, yx_max, c, tp, path):
+    def debug_visualize(self, data_yx_min, data_yx_max, yx_min, yx_max, c, tp, path):
         canvas = cv2.imread(path)
         canvas = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
-        canvas = self.draw_bbox(canvas, *(t.cpu().numpy() for t in (data_yx_min, data_yx_max)), colors=['g'])
-        canvas = self.draw_bbox(canvas, *(t.cpu().numpy()[tp] for t in (yx_min, yx_max)), colors=['w'])
+        size = np.reshape(np.array(canvas.shape[:2], np.float32), [1, 2])
+        data_yx_min, data_yx_max, yx_min, yx_max = (np.reshape(t.cpu().numpy(), [-1, 2]) * size for t in (data_yx_min, data_yx_max, yx_min, yx_max))
+        canvas = self.draw_bbox(canvas, data_yx_min, data_yx_max, colors=['g'])
+        canvas = self.draw_bbox(canvas, *(a[tp] for a in (yx_min, yx_max)), colors=['w'])
         fp = ~tp
-        canvas = self.draw_bbox(canvas, *(t.cpu().numpy()[fp] for t in (yx_min, yx_max)), colors=['k'])
+        canvas = self.draw_bbox(canvas, *(a[fp] for a in (yx_min, yx_max)), colors=['k'])
         fig = plt.figure()
         ax = fig.gca()
         ax.imshow(canvas)
@@ -278,26 +264,26 @@ class Eval(object):
                 if torch.is_tensor(t):
                     data[key] = utils.ensure_device(t)
             tensor = torch.autograd.Variable(data['tensor'], volatile=True)
-            batch_size = tensor.size(0)
             pred = pybenchmark.profile('inference')(model._inference)(self.inference, tensor)
-            _prob, pred['cls'] = conv_logits(pred)
             pred['iou'] = pred['iou'].contiguous()
-            pred['prob'] = pred['iou'] * _prob
+            logits = get_logits(pred)
+            pred['prob'] = F.softmax(logits, -1)
             for key in pred:
                 pred[key] = pred[key].data
             if self.config.getboolean('eval', 'debug'):
                 self.debug_data(data)
                 self.debug_pred(pred)
-            norm_bbox(data, pred)
-            for path, size, difficult, image, data_yx_min, data_yx_max, data_cls, yx_min, yx_max, iou, prob, cls in zip(*(data[key] for key in 'path, size, difficult'.split(', ')), *(torch.unbind(data[key]) for key in 'image, yx_min, yx_max, cls'.split(', ')), *(torch.unbind(pred[key].view(batch_size, -1, 2)) for key in 'yx_min, yx_max'.split(', ')), *(torch.unbind(pred[key].view(batch_size, -1)) for key in 'iou, prob, cls'.split(', '))):
+            norm_bbox_data(data)
+            norm_bbox_pred(pred)
+            for path, difficult, image, data_yx_min, data_yx_max, data_cls, iou, yx_min, yx_max, prob in zip(*(data[key] for key in 'path, difficult'.split(', ')), *(torch.unbind(data[key]) for key in 'image, yx_min, yx_max, cls'.split(', ')), *(torch.unbind(pred[key]) for key in 'iou, yx_min, yx_max, prob'.split(', '))):
                 data_yx_min, data_yx_max, data_cls = filter_valid(data_yx_min, data_yx_max, data_cls, difficult)
                 for c in data_cls.cpu().numpy():
                     cls_num[c] += 1
-                yx_min, yx_max, cls, score = self.filter_visible(yx_min, yx_max, iou, prob, cls)
-                keep = pybenchmark.profile('nms')(utils.postprocess.nms)(yx_min, yx_max, score, self.config.getfloat('detect', 'overlap'))
-                if keep:
-                    keep = utils.ensure_device(torch.LongTensor(keep))
-                    yx_min, yx_max, cls, score = (t[keep] for t in (yx_min, yx_max, cls, score))
+                iou = iou.view(-1)
+                yx_min, yx_max, prob = (t.view(-1, t.size(-1)) for t in (yx_min, yx_max, prob))
+                ret = postprocess(self.config, iou, yx_min, yx_max, prob)
+                if ret is not None:
+                    iou, yx_min, yx_max, cls, score = ret
                     for c in set(cls.cpu().numpy()):
                         c = int(c)  # PyTorch's bug
                         _score, tp = self.filter_cls(c, path, data_yx_min, data_yx_max, data_cls, yx_min, yx_max, cls, score)

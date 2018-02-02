@@ -102,15 +102,23 @@ class DatasetSize(object):
 
 class DetectThreshold(object):
     def __call__(self, env, **kwargs):
-        try:
-            self.color = '#FFC7CE'
-            return env.config.getfloat('detect', 'threshold')
-        except:
-            self.color = '#9C0006'
-            return env.config.getfloat('detect', 'threshold_cls')
+        return env.config.getfloat('detect', 'threshold')
 
     def format(self, workbook, worksheet, num, col):
-        worksheet.conditional_format(1, col, num + 1, col, {'type': 'data_bar', 'bar_color': self.color})
+        worksheet.conditional_format(1, col, num + 1, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
+
+
+class DetectThresholdCls(object):
+    def __call__(self, env, **kwargs):
+        return env.config.getfloat('detect', 'threshold_cls')
+
+    def format(self, workbook, worksheet, num, col):
+        worksheet.conditional_format(1, col, num + 1, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
+
+
+class DetectFix(object):
+    def __call__(self, env, **kwargs):
+        return env.config.getboolean('detect', 'fix')
 
 
 class DetectOverlap(object):
