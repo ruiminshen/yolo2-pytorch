@@ -29,7 +29,7 @@ import model
 
 
 class Inception3(_model.Inception3):
-    def __init__(self, config, anchors, num_cls, transform_input=False):
+    def __init__(self, config_channels, anchors, num_cls, transform_input=False):
         nn.Module.__init__(self)
         self.transform_input = transform_input
         self.Conv2d_1a_3x3 = BasicConv2d(3, 32, kernel_size=3, stride=2)
@@ -61,7 +61,7 @@ class Inception3(_model.Inception3):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-        if config.getboolean('model', 'pretrained'):
+        if config_channels.config.getboolean('model', 'pretrained'):
             url = _model.model_urls['inception_v3_google']
             logging.info('use pretrained model: ' + url)
             state_dict = self.state_dict()

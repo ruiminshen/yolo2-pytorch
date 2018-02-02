@@ -27,7 +27,7 @@ import model
 
 
 class DenseNet(_model.DenseNet):
-    def __init__(self, config, anchors, num_cls, growth_rate=32, block_config=(6, 12, 24, 16), num_init_features=64, bn_size=4, drop_rate=0):
+    def __init__(self, config_channels, anchors, num_cls, growth_rate=32, block_config=(6, 12, 24, 16), num_init_features=64, bn_size=4, drop_rate=0):
         nn.Module.__init__(self)
 
         # First convolution
@@ -65,9 +65,9 @@ class DenseNet(_model.DenseNet):
         return self.features(x)
 
 
-def densenet121(config, anchors, num_cls, **kwargs):
-    model = DenseNet(config, anchors, num_cls, num_init_features=64, growth_rate=32, block_config=(6, 12, 24, 16), **kwargs)
-    if config.getboolean('model', 'pretrained'):
+def densenet121(config_channels, anchors, num_cls, **kwargs):
+    model = DenseNet(config_channels, anchors, num_cls, num_init_features=64, growth_rate=32, block_config=(6, 12, 24, 16), **kwargs)
+    if config_channels.config.getboolean('model', 'pretrained'):
         url = model_urls['densenet121']
         logging.info('use pretrained model: ' + url)
         state_dict = model.state_dict()
@@ -78,9 +78,9 @@ def densenet121(config, anchors, num_cls, **kwargs):
     return model
 
 
-def densenet169(config, anchors, num_cls, **kwargs):
-    model = DenseNet(config, anchors, num_cls, num_init_features=64, growth_rate=32, block_config=(6, 12, 32, 32), **kwargs)
-    if config.getboolean('model', 'pretrained'):
+def densenet169(config_channels, anchors, num_cls, **kwargs):
+    model = DenseNet(config_channels, anchors, num_cls, num_init_features=64, growth_rate=32, block_config=(6, 12, 32, 32), **kwargs)
+    if config_channels.config.getboolean('model', 'pretrained'):
         url = model_urls['densenet169']
         logging.info('use pretrained model: ' + url)
         state_dict = model.state_dict()
@@ -91,9 +91,9 @@ def densenet169(config, anchors, num_cls, **kwargs):
     return model
 
 
-def densenet201(config, anchors, num_cls, **kwargs):
-    model = DenseNet(config, anchors, num_cls, num_init_features=64, growth_rate=32, block_config=(6, 12, 48, 32), **kwargs)
-    if config.getboolean('model', 'pretrained'):
+def densenet201(config_channels, anchors, num_cls, **kwargs):
+    model = DenseNet(config_channels, anchors, num_cls, num_init_features=64, growth_rate=32, block_config=(6, 12, 48, 32), **kwargs)
+    if config_channels.config.getboolean('model', 'pretrained'):
         url = model_urls['densenet201']
         logging.info('use pretrained model: ' + url)
         state_dict = model.state_dict()
@@ -104,9 +104,9 @@ def densenet201(config, anchors, num_cls, **kwargs):
     return model
 
 
-def densenet161(config, anchors, num_cls, **kwargs):
-    model = DenseNet(config, anchors, num_cls, num_init_features=96, growth_rate=48, block_config=(6, 12, 36, 24), **kwargs)
-    if config.getboolean('model', 'pretrained'):
+def densenet161(config_channels, anchors, num_cls, **kwargs):
+    model = DenseNet(config_channels, anchors, num_cls, num_init_features=96, growth_rate=48, block_config=(6, 12, 36, 24), **kwargs)
+    if config_channels.config.getboolean('model', 'pretrained'):
         url = model_urls['densenet161']
         logging.info('use pretrained model: ' + url)
         state_dict = model.state_dict()

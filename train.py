@@ -198,7 +198,7 @@ class SummaryWorker(multiprocessing.Process):
         yx_min, yx_max, cls, iou = ([a[m] for a, m in zip(l, mask)] for l in (yx_min, yx_max, cls, iou))
         if nms:
             overlap = self.config.getfloat('detect', 'overlap')
-            keep = [pybenchmark.profile('nms')(utils.postprocess.nms)(torch.Tensor(yx_min), torch.Tensor(yx_max), torch.Tensor(iou), overlap) if iou.shape[0] > 0 else [] for yx_min, yx_max, iou in zip(yx_min, yx_max, iou)]
+            keep = [pybenchmark.profile('nms')(utils.postprocess.nms)(torch.Tensor(iou), torch.Tensor(yx_min), torch.Tensor(yx_max), overlap) if iou.shape[0] > 0 else [] for yx_min, yx_max, iou in zip(yx_min, yx_max, iou)]
             keep = [np.array(k, np.int) for k in keep]
             yx_min, yx_max, cls = ([a[k] for a, k in zip(l, keep)] for l in (yx_min, yx_max, cls))
         return [self.draw_bbox(canvas, yx_min.astype(np.int), yx_max.astype(np.int), cls, colors=colors) for canvas, yx_min, yx_max, cls in zip(canvas, yx_min, yx_max, cls)]
@@ -286,14 +286,15 @@ class Train(object):
         )
         return torch.utils.data.DataLoader(dataset, batch_size=self.args.batch_size * torch.cuda.device_count() if torch.cuda.is_available() else self.args.batch_size, shuffle=True, num_workers=workers, collate_fn=collate_fn, pin_memory=torch.cuda.is_available())
 
-    def restore(self, model):
+    def load(self):
         try:
             path, step, epoch = utils.train.load_model(self.model_dir)
             state_dict = torch.load(path, map_location=lambda storage, loc: storage)
-            model.load_state_dict(state_dict)
+            config_channels = model.ConfigChannels(self.config, state_dict)
         except ValueError:
             step, epoch = 0, 0
-        return step, epoch
+            config_channels = model.ConfigChannels(self.config)
+        return step, epoch, config_channels
 
     def finetune(self, model, path):
         if os.path.isdir(path):
@@ -340,10 +341,12 @@ class Train(object):
             try:
                 loader = self.get_loader()
                 logging.info('num_workers=%d' % loader.num_workers)
-                dnn = utils.parse_attr(self.config.get('model', 'dnn'))(self.config, self.anchors, len(self.category))
+                step, epoch, config_channels = self.load()
+                dnn = utils.parse_attr(self.config.get('model', 'dnn'))(config_channels, self.anchors, len(self.category))
                 inference = model.Inference(self.config, dnn, self.anchors)
                 logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in inference.state_dict().values())))
-                step, epoch = self.restore(dnn)
+                if config_channels.state_dict is not None:
+                    dnn.load_state_dict(config_channels.state_dict)
                 if self.args.finetune:
                     path = os.path.expanduser(os.path.expandvars(self.args.finetune))
                     logging.info('finetune from ' + path)

@@ -30,6 +30,7 @@ import numpy as np
 import torch
 import humanize
 
+import model
 import utils.train
 
 
@@ -81,7 +82,7 @@ def main():
     category = utils.get_category(config, cache_dir if os.path.exists(cache_dir) else None)
     anchors = utils.get_anchors(config)
     anchors = torch.from_numpy(anchors).contiguous()
-    dnn = utils.parse_attr(config.get('model', 'dnn'))(config, anchors, len(category))
+    dnn = utils.parse_attr(config.get('model', 'dnn'))(model.ConfigChannels(config), anchors, len(category))
     dnn.eval()
     logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in dnn.state_dict().values())))
     state_dict = dnn.state_dict()

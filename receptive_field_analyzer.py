@@ -32,6 +32,7 @@ import torch.utils.data
 import tqdm
 import humanize
 
+import model
 import utils.data
 import utils.iou.torch
 import utils.postprocess
@@ -57,7 +58,7 @@ class Analyzer(object):
         self.model_dir = utils.get_model_dir(config)
         self.category = utils.get_category(config)
         self.anchors = torch.from_numpy(utils.get_anchors(config)).contiguous()
-        self.dnn = utils.parse_attr(config.get('model', 'dnn'))(config, self.anchors, len(self.category))
+        self.dnn = utils.parse_attr(config.get('model', 'dnn'))(model.ConfigChannels(config), self.anchors, len(self.category))
         self.dnn.eval()
         logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in self.dnn.state_dict().values())))
         if torch.cuda.is_available():

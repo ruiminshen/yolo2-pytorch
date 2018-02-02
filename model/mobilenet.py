@@ -54,7 +54,7 @@ def conv_unit(in_channels, out_channels, stride):
 
 
 class MobileNet(nn.Module):
-    def __init__(self, config, anchors, num_cls):
+    def __init__(self, config_channels, anchors, num_cls):
         nn.Module.__init__(self)
 
         self.layers = nn.Sequential(

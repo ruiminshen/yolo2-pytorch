@@ -25,7 +25,7 @@ import model
 
 
 class Inception4(nn.Module):
-    def __init__(self, config, anchors, num_cls):
+    def __init__(self, config_channels, anchors, num_cls):
         nn.Module.__init__(self)
         self.features = nn.Sequential(
             BasicConv2d(3, 32, kernel_size=3, stride=2),
@@ -53,8 +53,8 @@ class Inception4(nn.Module):
             nn.Conv2d(1536, model.output_channels(len(anchors), num_cls), 1),
         )
 
-        gamma = config.getboolean('batch_norm', 'gamma')
-        beta = config.getboolean('batch_norm', 'beta')
+        gamma = config_channels.config.getboolean('batch_norm', 'gamma')
+        beta = config_channels.config.getboolean('batch_norm', 'beta')
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 m.weight = nn.init.kaiming_normal(m.weight)
@@ -64,8 +64,8 @@ class Inception4(nn.Module):
                 m.weight.requires_grad = gamma
                 m.bias.requires_grad = beta
 
-        if config.getboolean('model', 'pretrained'):
-            settings = pretrained_settings['inceptionv4'][config.get('inception4', 'pretrained')]
+        if config_channels.config.getboolean('model', 'pretrained'):
+            settings = pretrained_settings['inceptionv4'][config_channels.config.get('inception4', 'pretrained')]
             logging.info('use pretrained model: ' + str(settings))
             state_dict = self.state_dict()
             for key, value in torch.utils.model_zoo.load_url(settings['url']).items():

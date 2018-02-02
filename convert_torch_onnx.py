@@ -47,15 +47,12 @@ def main():
     category = utils.get_category(config, cache_dir if os.path.exists(cache_dir) else None)
     anchors = utils.get_anchors(config)
     anchors = torch.from_numpy(anchors).contiguous()
-    dnn = utils.parse_attr(config.get('model', 'dnn'))(config, anchors, len(category))
+    path, step, epoch = utils.train.load_model(model_dir)
+    state_dict = torch.load(path, map_location=lambda storage, loc: storage)
+    dnn = utils.parse_attr(config.get('model', 'dnn'))(model.ConfigChannels(config, state_dict), anchors, len(category))
     inference = model.Inference(config, dnn, anchors)
     inference.eval()
     logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in inference.state_dict().values())))
-    path = model_dir + '.pth'
-    if not os.path.exists(path):
-        path, step, epoch = utils.train.load_model(model_dir)
-    state_dict = torch.load(path, map_location=lambda storage, loc: storage)
-    logging.info(path + ' is used')
     dnn.load_state_dict(state_dict)
     image = torch.autograd.Variable(torch.randn(args.batch_size, 3, height, width), volatile=True)
     path = model_dir + '.onnx'

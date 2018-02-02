@@ -34,6 +34,7 @@ import humanize
 import graphviz
 
 import utils.train
+import model
 
 
 class Graph(object):
@@ -108,17 +109,19 @@ def main():
     model_dir = utils.get_model_dir(config)
     category = utils.get_category(config)
     anchors = torch.from_numpy(utils.get_anchors(config)).contiguous()
-    dnn = utils.parse_attr(config.get('model', 'dnn'))(config, anchors, len(category))
-    logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in dnn.state_dict().values())))
-    height, width = tuple(map(int, config.get('image', 'size').split()))
-    image = torch.autograd.Variable(torch.randn(args.batch_size, 3, height, width))
-    output = dnn(image)
     try:
         path, step, epoch = utils.train.load_model(model_dir)
         state_dict = torch.load(path, map_location=lambda storage, loc: storage)
-        dnn.load_state_dict(state_dict)
     except ValueError:
         logging.warning('model cannot be loaded')
+        state_dict = None
+    dnn = utils.parse_attr(config.get('model', 'dnn'))(model.ConfigChannels(config, state_dict), anchors, len(category))
+    logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in dnn.state_dict().values())))
+    if state_dict is not None:
+        dnn.load_state_dict(state_dict)
+    height, width = tuple(map(int, config.get('image', 'size').split()))
+    image = torch.autograd.Variable(torch.randn(args.batch_size, 3, height, width))
+    output = dnn(image)
     state_dict = dnn.state_dict()
     graph = Graph(config, state_dict)
     graph(output.grad_fn)

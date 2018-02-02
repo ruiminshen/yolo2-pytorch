@@ -71,62 +71,49 @@ class Conv2d_BatchNorm(nn.Module):
 
 
 class Darknet(nn.Module):
-    def __init__(self, config, anchors, num_cls, stride=2):
+    def __init__(self, config_channels, anchors, num_cls, stride=2):
         nn.Module.__init__(self)
         self.stride = stride
-        channels_in = 3
-        channels_out = 32
+        channels = 32
         layers = []
 
         # layers1
         for _ in range(2):
-            layers.append(Conv2d_BatchNorm(channels_in, channels_out, 3, same_padding=True))
-            channels_in = layers[-1].conv.weight.size(0)
+            layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels, 'layers1.%d.conv.weight' % len(layers)), 3, same_padding=True))
             layers.append(nn.MaxPool2d(kernel_size=2))
-            channels_out *= 2
+            channels *= 2
         # down 4
         for _ in range(2):
-            layers.append(Conv2d_BatchNorm(channels_in, channels_out, 3, same_padding=True))
-            channels_in = layers[-1].conv.weight.size(0)
-            layers.append(Conv2d_BatchNorm(channels_in, channels_out // 2, 1))
-            channels_in = layers[-1].conv.weight.size(0)
-            layers.append(Conv2d_BatchNorm(channels_in, channels_out, 3, same_padding=True))
-            channels_in = layers[-1].conv.weight.size(0)
+            layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels, 'layers1.%d.conv.weight' % len(layers)), 3, same_padding=True))
+            layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels // 2, 'layers1.%d.conv.weight' % len(layers)), 1))
+            layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels, 'layers1.%d.conv.weight' % len(layers)), 3, same_padding=True))
             layers.append(nn.MaxPool2d(kernel_size=2))
-            channels_out *= 2
+            channels *= 2
         # down 16
         for _ in range(2):
-            layers.append(Conv2d_BatchNorm(channels_in, channels_out, 3, same_padding=True))
-            channels_in = layers[-1].conv.weight.size(0)
-            layers.append(Conv2d_BatchNorm(channels_in, channels_out // 2, 1))
-            channels_in = layers[-1].conv.weight.size(0)
-        layers.append(Conv2d_BatchNorm(channels_in, channels_out, 3, same_padding=True))
-        channels_in = layers[-1].conv.weight.size(0)
+            layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels, 'layers1.%d.conv.weight' % len(layers)), 3, same_padding=True))
+            layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels // 2, 'layers1.%d.conv.weight' % len(layers)), 1))
+        layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels, 'layers1.%d.conv.weight' % len(layers)), 3, same_padding=True))
         self.layers1 = nn.Sequential(*layers)
 
         # layers2
         layers = []
         layers.append(nn.MaxPool2d(kernel_size=2))
-        channels_out *= 2
+        channels *= 2
         # down 32
         for _ in range(2):
-            layers.append(Conv2d_BatchNorm(channels_in, channels_out, 3, same_padding=True))
-            channels_in = layers[-1].conv.weight.size(0)
-            layers.append(Conv2d_BatchNorm(channels_in, channels_out // 2, 1))
-            channels_in = layers[-1].conv.weight.size(0)
+            layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels, 'layers2.%d.conv.weight' % len(layers)), 3, same_padding=True))
+            layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels // 2, 'layers2.%d.conv.weight' % len(layers)), 1))
         for _ in range(3):
-            layers.append(Conv2d_BatchNorm(channels_in, channels_out, 3, same_padding=True))
-            channels_in = layers[-1].conv.weight.size(0)
+            layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels, 'layers2.%d.conv.weight' % len(layers)), 3, same_padding=True))
         self.layers2 = nn.Sequential(*layers)
 
-        self.passthrough = Conv2d_BatchNorm(self.layers1[-1].conv.weight.size(0), 64, 1)
+        self.passthrough = Conv2d_BatchNorm(self.layers1[-1].conv.weight.size(0), config_channels(64, 'passthrough.conv.weight'), 1)
 
         # layers3
         layers = []
-        channels_in += self.passthrough.conv.weight.size(0) * self.stride * self.stride # reorg
-        layers.append(Conv2d_BatchNorm(channels_in, 1024, 3, same_padding=True))
-        channels_in = layers[-1].conv.weight.size(0)
-        layers.append(Conv2d(channels_in, model.output_channels(len(anchors), num_cls), 1, act=False))
+        layers.append(Conv2d_BatchNorm(self.passthrough.conv.weight.size(0) * self.stride * self.stride + self.layers2[-1].conv.weight.size(0), config_channels(1024, 'layers3.%d.conv.weight' % len(layers)), 3, same_padding=True))
+        layers.append(Conv2d(config_channels.channels, model.output_channels(len(anchors), num_cls), 1, act=False))
         self.layers3 = nn.Sequential(*layers)
 
         # init
@@ -146,26 +133,22 @@ class Darknet(nn.Module):
 
 
 class Tiny(nn.Module):
-    def __init__(self, config, anchors, num_cls):
+    def __init__(self, config_channels, anchors, num_cls):
         nn.Module.__init__(self)
-        channels_in = 3
-        channels_out = 16
+        channels = 16
         layers = []
 
         for _ in range(5):
-            layers.append(Conv2d_BatchNorm(channels_in, channels_out, 3, same_padding=True))
-            channels_in = layers[-1].conv.weight.size(0)
+            layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels, 'layers.%d.conv.weight' % len(layers)), 3, same_padding=True))
             layers.append(nn.MaxPool2d(kernel_size=2))
-            channels_out *= 2
-        layers.append(Conv2d_BatchNorm(channels_in, channels_out, 3, same_padding=True))
-        channels_in = layers[-1].conv.weight.size(0)
+            channels *= 2
+        layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels, 'layers.%d.conv.weight' % len(layers)), 3, same_padding=True))
         layers.append(nn.ConstantPad2d((0, 1, 0, 1), float(np.finfo(np.float32).min)))
         layers.append(nn.MaxPool2d(kernel_size=2, stride=1))
-        channels_out *= 2
+        channels *= 2
         for _ in range(2):
-            layers.append(Conv2d_BatchNorm(channels_in, channels_out, 3, same_padding=True))
-            channels_in = layers[-1].conv.weight.size(0)
-        layers.append(Conv2d(channels_in, model.output_channels(len(anchors), num_cls), 1, act=False))
+            layers.append(Conv2d_BatchNorm(config_channels.channels, config_channels(channels, 'layers.%d.conv.weight' % len(layers)), 3, same_padding=True))
+        layers.append(Conv2d(config_channels.channels, model.output_channels(len(anchors), num_cls), 1, act=False))
         self.layers = nn.Sequential(*layers)
 
         # init

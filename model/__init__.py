@@ -15,6 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+import logging
+
 import numpy as np
 import torch
 import torch.autograd
@@ -22,6 +24,23 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import utils.iou.torch
+
+
+class ConfigChannels(object):
+    def __init__(self, config, state_dict=None, channels=3):
+        self.config = config
+        self.state_dict = state_dict
+        self.channels = channels
+
+    def __call__(self, default, name, fn=lambda var: var.size(0)):
+        if self.state_dict is None:
+            self.channels = default
+        else:
+            var = self.state_dict[name]
+            self.channels = fn(var)
+            if self.channels != default:
+                logging.warning('%s: change number of output channels from %d to %d' % (name, default, self.channels))
+        return self.channels
 
 
 def output_channels(num_anchors, num_cls):

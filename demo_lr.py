@@ -44,7 +44,7 @@ def main():
         logging.config.dictConfig(yaml.load(f))
     category = utils.get_category(config)
     anchors = torch.from_numpy(utils.get_anchors(config)).contiguous()
-    dnn = utils.parse_attr(config.get('model', 'dnn'))(config, anchors, len(category))
+    dnn = utils.parse_attr(config.get('model', 'dnn'))(model.ConfigChannels(config), anchors, len(category))
     inference = model.Inference(config, dnn, anchors)
     inference.train()
     optimizer = eval(config.get('train', 'optimizer'))(filter(lambda p: p.requires_grad, inference.parameters()), args.learning_rate)
@@ -62,7 +62,7 @@ def make_args():
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
     parser.add_argument('-o', '--optimizer', default='adam')
-    parser.add_argument('-lr', '--learning_rate', default=1e-6, type=float, help='learning rate')
+    parser.add_argument('-lr', '--learning_rate', default=1e-3, type=float, help='learning rate')
     parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
 
