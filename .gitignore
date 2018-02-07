@@ -4,3 +4,4 @@ __pycache__
 .pydevproject
 .settings/
 .idea/
+.cache/
