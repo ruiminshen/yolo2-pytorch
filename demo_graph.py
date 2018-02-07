@@ -44,6 +44,7 @@ class Graph(object):
         self.state_dict = state_dict
         self.var_name = {t._cdata: k for k, t in state_dict.items()}
         self.seen = set()
+        self.index = 0
         self.drawn = set()
         self.cm = matplotlib.cm.get_cmap(cmap)
         self.metric = eval(config.get('graph', 'metric'))
@@ -67,13 +68,16 @@ class Graph(object):
                 name = self.draw_tensor(tensor, style='filled, rounded')
                 self.dot.edge(name, str(id(node)), style='dashed', arrowhead='none', arrowtail='none')
                 self.drawn.add(name)
-            return self.draw_node(node)
+            try:
+                return self.draw_node(node)
+            finally:
+                self.index += 1
 
     def draw_node(self, node):
         if hasattr(node, 'variable'):
             return self.draw_tensor(node.variable.data, name=str(id(node)), shape='note')
         else:
-            self.dot.node(str(id(node)), type(node).__name__, fillcolor='white')
+            self.dot.node(str(id(node)), '%d: %s' % (self.index, type(node).__name__), fillcolor='white')
 
     def draw_tensor(self, tensor, name=None, **kwargs):
         var_name = self.var_name[tensor._cdata]
