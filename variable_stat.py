@@ -32,6 +32,7 @@ import xlsxwriter
 
 import utils
 import utils.train
+import utils.walk
 
 
 class Name(object):
@@ -57,17 +58,17 @@ class BytesNatural(object):
         return humanize.naturalsize(variable.numpy().nbytes)
 
 
-class AbsMean(object):
+class MeanDense(object):
     def __call__(self, name, variable):
-        return np.mean(np.abs(variable.numpy()))
+        return np.mean(utils.walk.dense(variable))
 
     def format(self, workbook, worksheet, num, col):
         worksheet.conditional_format(1, col, num, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
 
 
-class MinAbsMean(object):
+class Rank(object):
     def __call__(self, name, variable):
-        return np.min([np.mean(np.abs(a)) for a in variable.numpy()])
+        return len(variable.size())
 
     def format(self, workbook, worksheet, num, col):
         worksheet.conditional_format(1, col, num, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})
