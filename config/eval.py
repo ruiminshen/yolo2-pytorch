@@ -120,6 +120,12 @@ class DetectFix(object):
     def __call__(self, env, **kwargs):
         return env.config.getboolean('detect', 'fix')
 
+    def format(self, workbook, worksheet, num, col):
+        format_green = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100'})
+        format_red = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+        worksheet.conditional_format(1, col, num + 1, col, {'type': 'cell', 'criteria': '==', 'value': '1', 'format': format_green})
+        worksheet.conditional_format(1, col, num + 1, col, {'type': 'cell', 'criteria': '<>', 'value': '1', 'format': format_red})
+
 
 class DetectOverlap(object):
     def __call__(self, env, **kwargs):
