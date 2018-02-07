@@ -71,6 +71,8 @@ class Conv2d_BatchNorm(nn.Module):
 
 
 class Darknet(nn.Module):
+    size = (416, 416)
+
     def __init__(self, config_channels, anchors, num_cls, stride=2):
         nn.Module.__init__(self)
         self.stride = stride
@@ -133,6 +135,8 @@ class Darknet(nn.Module):
 
 
 class Tiny(nn.Module):
+    size = (416, 416)
+
     def __init__(self, config_channels, anchors, num_cls):
         nn.Module.__init__(self)
         channels = 16
