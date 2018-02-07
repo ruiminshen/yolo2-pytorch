@@ -54,7 +54,7 @@ and operators to augment images without labels (such as random blur, random satu
 - [ ] Distributed training.
 - [ ] [Focal loss](https://arxiv.org/abs/1708.02002).
 - [x] Channel-wise model parameter analyzer.
-- [ ] Channel-wise model parameter pruner.
+- [x] Automatically change the number of channels.
 - [x] Receptive field analyzer.
 
 ## Quick Start
