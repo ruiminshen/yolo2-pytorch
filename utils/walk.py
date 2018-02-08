@@ -210,8 +210,9 @@ class TestYolo2Tiny(unittest.TestCase):
             (1, 1),
             (1, 2),
         ], dtype=np.float32))
-        self.model = model.yolo2.Tiny
-        size = self.model.size
+        module = model.yolo2
+        self.model = module.Tiny
+        size = module.settings['size']
         self.image = torch.autograd.Variable(torch.randn(1, 3, *size))
 
     def test_layers_14_conv_weight(self):
@@ -237,6 +238,7 @@ class TestYolo2Tiny(unittest.TestCase):
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
         dnn = self.model(config_channels, self.anchors, len(self.category))
         dnn(self.image)
+        self.assertEqual(len(channels), len(dnn.state_dict()[name]))
 
 
 class TestYolo2Darknet(unittest.TestCase):
@@ -248,8 +250,9 @@ class TestYolo2Darknet(unittest.TestCase):
             (1, 1),
             (1, 2),
         ], dtype=np.float32))
-        self.model = model.yolo2.Darknet
-        size = self.model.size
+        module = model.yolo2
+        self.model = module.Darknet
+        size = module.settings['size']
         self.image = torch.autograd.Variable(torch.randn(1, 3, *size))
 
     def test_layers1_0_conv_weight(self):
@@ -275,6 +278,7 @@ class TestYolo2Darknet(unittest.TestCase):
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
         dnn = self.model(config_channels, self.anchors, len(self.category))
         dnn(self.image)
+        self.assertEqual(len(channels), len(dnn.state_dict()[name]))
 
     def test_layers1_16_conv_weight(self):
         dnn = self.model(self.config_channels, self.anchors, len(self.category))
@@ -300,6 +304,7 @@ class TestYolo2Darknet(unittest.TestCase):
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
         dnn = self.model(config_channels, self.anchors, len(self.category))
         dnn(self.image)
+        self.assertEqual(len(channels), len(dnn.state_dict()[name]))
 
     def test_passthrough_conv_weight(self):
         dnn = self.model(self.config_channels, self.anchors, len(self.category))
@@ -324,6 +329,7 @@ class TestYolo2Darknet(unittest.TestCase):
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
         dnn = self.model(config_channels, self.anchors, len(self.category))
         dnn(self.image)
+        self.assertEqual(len(channels), len(dnn.state_dict()[name]))
 
     def test_layers2_1_conv_weight(self):
         dnn = self.model(self.config_channels, self.anchors, len(self.category))
@@ -348,6 +354,7 @@ class TestYolo2Darknet(unittest.TestCase):
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
         dnn = self.model(config_channels, self.anchors, len(self.category))
         dnn(self.image)
+        self.assertEqual(len(channels), len(dnn.state_dict()[name]))
 
     def test_layers2_7_conv_weight(self):
         dnn = self.model(self.config_channels, self.anchors, len(self.category))
@@ -372,6 +379,7 @@ class TestYolo2Darknet(unittest.TestCase):
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
         dnn = self.model(config_channels, self.anchors, len(self.category))
         dnn(self.image)
+        self.assertEqual(len(channels), len(dnn.state_dict()[name]))
 
 
 if __name__ == '__main__':

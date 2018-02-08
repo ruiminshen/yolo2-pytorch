@@ -23,6 +23,11 @@ import torch.autograd
 import model
 
 
+settings = {
+    'size': (416, 416),
+}
+
+
 def reorg(x, stride_h=2, stride_w=2):
     batch_size, channels, height, width = x.size()
     _height, _width = height // stride_h, width // stride_w
@@ -71,8 +76,6 @@ class Conv2d_BatchNorm(nn.Module):
 
 
 class Darknet(nn.Module):
-    size = (416, 416)
-
     def __init__(self, config_channels, anchors, num_cls, stride=2):
         nn.Module.__init__(self)
         self.stride = stride
@@ -135,8 +138,6 @@ class Darknet(nn.Module):
 
 
 class Tiny(nn.Module):
-    size = (416, 416)
-
     def __init__(self, config_channels, anchors, num_cls):
         nn.Module.__init__(self)
         channels = 16
