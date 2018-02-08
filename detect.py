@@ -87,7 +87,7 @@ class Detect(object):
         self.cache_dir = utils.get_cache_dir(config)
         self.model_dir = utils.get_model_dir(config)
         self.category = utils.get_category(config, self.cache_dir if os.path.exists(self.cache_dir) else None)
-        self.draw_bbox = utils.visualize.DrawBBox(config, self.category, thickness=args.thickness)
+        self.draw_bbox = utils.visualize.DrawBBox(config, self.category, colors=args.colors, thickness=args.thickness)
         self.anchors = torch.from_numpy(utils.get_anchors(config)).contiguous()
         self.height, self.width = tuple(map(int, config.get('image', 'size').split()))
         self.path, self.step, self.epoch = utils.train.load_model(self.model_dir)
@@ -118,7 +118,7 @@ class Detect(object):
     def create_cap(self):
         try:
             cap = int(self.args.input)
-        except:
+        except ValueError:
             cap = os.path.expanduser(os.path.expandvars(self.args.input))
             assert os.path.exists(cap)
         self.cap = cv2.VideoCapture(cap)
@@ -179,9 +179,10 @@ class Detect(object):
                 self.scale = scale
             yx_min, yx_max = ((t * scale).cpu().numpy().astype(np.int) for t in (yx_min, yx_max))
             image_result = self.draw_bbox(image_result, yx_min, yx_max, cls)
-        cv2.imshow('detection', image_result)
         if self.args.output:
             self.writer.write(image_result)
+        else:
+            cv2.imshow('detection', image_result)
         if cv2.waitKey(0 if self.args.pause else 1) in self.keys:
             root = os.path.join(self.model_dir, 'snapshot')
             os.makedirs(root, exist_ok=True)
@@ -220,6 +221,7 @@ def make_args():
     parser.add_argument('--pause', action='store_true')
     parser.add_argument('--fourcc', default='XVID', help='4-character code of codec used to compress the frames, such as XVID, MJPG')
     parser.add_argument('--thickness', default=3)
+    parser.add_argument('--colors', nargs='+', default=[])
     parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()
 

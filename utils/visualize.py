@@ -34,13 +34,13 @@ import utils
 
 
 class DrawBBox(object):
-    def __init__(self, config, category, colors=None, thickness=1, line_type=cv2.LINE_8, shift=0, font_face=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1):
+    def __init__(self, config, category, colors=[], thickness=1, line_type=cv2.LINE_8, shift=0, font_face=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1):
         self.config = config
         self.category = category
-        if colors is None:
-            self.colors = [tuple(map(lambda c: c * 255, matplotlib.colors.colorConverter.to_rgb(prop['color'])[::-1])) for prop in plt.rcParams['axes.prop_cycle']]
-        else:
+        if colors:
             self.colors = [tuple(map(lambda c: c * 255, matplotlib.colors.colorConverter.to_rgb(c)[::-1])) for c in colors]
+        else:
+            self.colors = [tuple(map(lambda c: c * 255, matplotlib.colors.colorConverter.to_rgb(prop['color'])[::-1])) for prop in plt.rcParams['axes.prop_cycle']]
         self.thickness = thickness
         self.line_type = line_type
         self.shift = shift
