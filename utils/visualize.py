@@ -34,7 +34,7 @@ import utils
 
 
 class DrawBBox(object):
-    def __init__(self, config, category, colors=[], thickness=1, line_type=cv2.LINE_8, shift=0, font_face=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1):
+    def __init__(self, config, category, colors=[], thickness=3, line_type=cv2.LINE_8, shift=0, font_face=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1):
         self.config = config
         self.category = category
         if colors:

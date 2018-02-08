@@ -320,7 +320,7 @@ class TestYolo2Darknet(unittest.TestCase):
         self.assertDictEqual(closure.input, {
             'layers3.0.conv.weight': 0,
         })
-        d = dense(state_dict[name])
+        d = utils.dense(state_dict[name])
         channels = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
         prune(closure, channels)
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
@@ -345,7 +345,7 @@ class TestYolo2Darknet(unittest.TestCase):
         self.assertDictEqual(closure.input, {
             'layers2.2.conv.weight': 0,
         })
-        d = dense(state_dict[name])
+        d = utils.dense(state_dict[name])
         channels = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
         prune(closure, channels)
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
@@ -370,7 +370,7 @@ class TestYolo2Darknet(unittest.TestCase):
         self.assertDictEqual(closure.input, {
             'layers3.0.conv.weight': 64,
         })
-        d = dense(state_dict[name])
+        d = utils.dense(state_dict[name])
         channels = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
         prune(closure, channels)
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
