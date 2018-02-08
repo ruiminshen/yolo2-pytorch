@@ -34,23 +34,28 @@ import utils
 
 
 class DrawBBox(object):
-    def __init__(self, config, category, colors=None):
+    def __init__(self, config, category, colors=None, thickness=1, line_type=cv2.LINE_8, shift=0, font_face=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1):
         self.config = config
+        self.category = category
         if colors is None:
             self.colors = [tuple(map(lambda c: c * 255, matplotlib.colors.colorConverter.to_rgb(prop['color'])[::-1])) for prop in plt.rcParams['axes.prop_cycle']]
         else:
             self.colors = [tuple(map(lambda c: c * 255, matplotlib.colors.colorConverter.to_rgb(c)[::-1])) for c in colors]
-        self.category = category
+        self.thickness = thickness
+        self.line_type = line_type
+        self.shift = shift
+        self.font_face = font_face
+        self.font_scale = font_scale
 
-    def __call__(self, image, yx_min, yx_max, cls=None, colors=None, thickness=1, line_type=cv2.LINE_8, shift=0, font_face=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, debug=False):
+    def __call__(self, image, yx_min, yx_max, cls=None, colors=None, debug=False):
         colors = self.colors if colors is None else [tuple(map(lambda c: c * 255, matplotlib.colors.colorConverter.to_rgb(c)[::-1])) for c in colors]
         if cls is None:
             cls = [None] * len(yx_min)
         for color, (ymin, xmin), (ymax, xmax), cls in zip(itertools.cycle(colors), yx_min, yx_max, cls):
             try:
-                cv2.rectangle(image, (xmin, ymin), (xmax, ymax), color, thickness=thickness, lineType=line_type, shift=shift)
+                cv2.rectangle(image, (xmin, ymin), (xmax, ymax), color, thickness=self.thickness, lineType=self.line_type, shift=self.shift)
                 if cls is not None:
-                    cv2.putText(image, self.category[cls], (xmin, ymin), font_face, font_scale, color=color)
+                    cv2.putText(image, self.category[cls], (xmin, ymin), self.font_face, self.font_scale, color=color, thickness=self.thickness)
             except OverflowError as e:
                 logging.warning(e, (xmin, ymin), (xmax, ymax))
         if debug:
