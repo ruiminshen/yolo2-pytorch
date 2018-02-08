@@ -30,6 +30,7 @@ import torch.utils.data
 import humanize
 
 import model
+import utils
 import utils.train
 import utils.walk
 
@@ -56,7 +57,7 @@ def main():
     state_dict = dnn.state_dict()
     closure = utils.walk.Closure(args.name, state_dict, args.scope, args.debug)
     closure(output.grad_fn)
-    d = utils.walk.dense(state_dict[args.name])
+    d = utils.dense(state_dict[args.name])
     channels = torch.LongTensor(np.argsort(d)[int(len(d) * args.remove):])
     utils.walk.prune(closure, channels)
     if args.debug:

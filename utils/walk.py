@@ -29,10 +29,7 @@ import humanize
 import graphviz
 
 import model.yolo2
-
-
-def dense(var):
-    return [torch.mean(torch.abs(x)) if torch.is_tensor(x) else np.abs(x) for x in var]
+import utils
 
 
 def prune(modifier, channels):
@@ -232,7 +229,7 @@ class TestYolo2Tiny(unittest.TestCase):
         self.assertDictEqual(closure.input, {
             'layers.15.conv.weight': 0,
         })
-        d = dense(state_dict[name])
+        d = utils.dense(state_dict[name])
         channels = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
         prune(closure, channels)
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
@@ -272,7 +269,7 @@ class TestYolo2Darknet(unittest.TestCase):
         self.assertDictEqual(closure.input, {
             'layers1.2.conv.weight': 0,
         })
-        d = dense(state_dict[name])
+        d = utils.dense(state_dict[name])
         channels = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
         prune(closure, channels)
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
@@ -298,7 +295,7 @@ class TestYolo2Darknet(unittest.TestCase):
             'passthrough.conv.weight': 0,
             'layers2.1.conv.weight': 0,
         })
-        d = dense(state_dict[name])
+        d = utils.dense(state_dict[name])
         channels = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
         prune(closure, channels)
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)

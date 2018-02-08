@@ -17,13 +17,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
 import itertools
+import inspect
 
 import numpy as np
+import torch
 import scipy.misc
 import matplotlib
 import matplotlib.cm
+import matplotlib.colors
 import matplotlib.pyplot as plt
+import humanize
+import graphviz
 import cv2
+
+import utils
 
 
 class DrawBBox(object):
@@ -67,3 +74,88 @@ class DrawIou(object):
             cv2.imshow('iou_max=%f, iou_sum=%f' % (np.max(iou), np.sum(iou)), canvas)
             cv2.waitKey(0)
         return canvas
+
+
+class Graph(object):
+    def __init__(self, config, state_dict, cmap=None):
+        self.dot = graphviz.Digraph(node_attr=dict(config.items('digraph_node_attr')), graph_attr=dict(config.items('digraph_graph_attr')))
+        self.dot.format = config.get('graph', 'format')
+        self.state_dict = state_dict
+        self.var_name = {t._cdata: k for k, t in state_dict.items()}
+        self.seen = set()
+        self.index = 0
+        self.drawn = set()
+        self.cm = matplotlib.cm.get_cmap(cmap)
+        self.metric = eval(config.get('graph', 'metric'))
+        metrics = [self.metric(t) for t in state_dict.values()]
+        self.minmax = [min(metrics), max(metrics)]
+
+    def __call__(self, node):
+        if node not in self.seen:
+            self.traverse_next(node)
+            self.traverse_tensor(node)
+            self.seen.add(node)
+            self.index += 1
+
+    def traverse_next(self, node):
+        if hasattr(node, 'next_functions'):
+            for n, _ in node.next_functions:
+                if n is not None:
+                    self.__call__(n)
+                    self._draw_node_edge(node, n)
+        self._draw_node(node)
+
+    def traverse_tensor(self, node):
+        tensors = [t for name, t in inspect.getmembers(node) if torch.is_tensor(t)]
+        if hasattr(node, 'saved_tensors'):
+            tensors += node.saved_tensors
+        for tensor in tensors:
+            name = self.var_name[tensor._cdata]
+            self.drawn.add(name)
+            self._draw_tensor(node, tensor)
+
+    def _draw_node(self, node):
+        if hasattr(node, 'variable'):
+            tensor = node.variable.data
+            name = self.var_name[tensor._cdata]
+            label = '\n'.join(map(str, [
+                '%d: %s' % (self.index, name),
+                list(tensor.size()),
+                humanize.naturalsize(tensor.numpy().nbytes),
+            ]))
+            fillcolor, fontcolor = self._tensor_color(tensor)
+            self.dot.node(str(id(node)), label, shape='note', fillcolor=fillcolor, fontcolor=fontcolor)
+            self.drawn.add(name)
+        else:
+            self.dot.node(str(id(node)), '%d: %s' % (self.index, type(node).__name__), fillcolor='white')
+
+    def _draw_node_edge(self, node, n):
+        if hasattr(n, 'variable'):
+            self.dot.edge(str(id(n)), str(id(node)), arrowhead='none', arrowtail='none')
+        else:
+            self.dot.edge(str(id(n)), str(id(node)))
+
+    def _draw_tensor(self, node, tensor):
+        name = self.var_name[tensor._cdata]
+        label = '\n'.join(map(str, [
+            name,
+            list(tensor.size()),
+            humanize.naturalsize(tensor.numpy().nbytes),
+        ]))
+        fillcolor, fontcolor = self._tensor_color(tensor)
+        self.dot.node(name, label, style='filled, rounded', fillcolor=fillcolor, fontcolor=fontcolor)
+        self.dot.edge(name, str(id(node)), style='dashed', arrowhead='none', arrowtail='none')
+
+    def _tensor_color(self, tensor):
+        level = self._norm(self.metric(tensor))
+        fillcolor = self.cm(np.int(level * self.cm.N))
+        fontcolor = self.cm(self.cm.N if level < 0.5 else 0)
+        return matplotlib.colors.to_hex(fillcolor), matplotlib.colors.to_hex(fontcolor)
+
+    def _norm(self, metric):
+        min, max = self.minmax
+        assert min <= metric <= max, (metric, self.minmax)
+        if min < max:
+            return (metric - min) / (max - min)
+        else:
+            return metric

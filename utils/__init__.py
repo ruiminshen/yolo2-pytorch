@@ -112,6 +112,10 @@ def ensure_device(t, device_id=None, async=False):
     return t
 
 
+def dense(var):
+    return [torch.mean(torch.abs(x)) if torch.is_tensor(x) else np.abs(x) for x in var]
+
+
 def abs_mean(data, dtype=np.float32):
     assert isinstance(data, np.ndarray), type(data)
     return np.sum(np.abs(data)) / dtype(data.size)
