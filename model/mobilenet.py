@@ -56,24 +56,23 @@ def conv_unit(in_channels, out_channels, stride):
 class MobileNet(nn.Module):
     def __init__(self, config_channels, anchors, num_cls):
         nn.Module.__init__(self)
-
-        self.layers = nn.Sequential(
-            conv_bn(  3,  32, 2),
-            conv_unit(32, 64, 1),
-            conv_unit(64, 128, 2),
-            conv_unit(128, 128, 1),
-            conv_unit(128, 256, 2),
-            conv_unit(256, 256, 1),
-            conv_unit(256, 512, 2),
-            conv_unit(512, 512, 1),
-            conv_unit(512, 512, 1),
-            conv_unit(512, 512, 1),
-            conv_unit(512, 512, 1),
-            conv_unit(512, 512, 1),
-            conv_unit(512, 1024, 2),
-            conv_unit(1024, 1024, 1),
-            nn.Conv2d(1024, model.output_channels(len(anchors), num_cls), 1)
-        )
+        layers = []
+        layers.append(conv_bn(config_channels.channels, config_channels(32, 'layers.%d.conv.weight' % len(layers)), 2))
+        layers.append(conv_unit(config_channels.channels, config_channels(64, 'layers.%d.pw.conv.weight' % len(layers)), 1))
+        layers.append(conv_unit(config_channels.channels, config_channels(128, 'layers.%d.pw.conv.weight' % len(layers)), 2))
+        layers.append(conv_unit(config_channels.channels, config_channels(128, 'layers.%d.pw.conv.weight' % len(layers)), 1))
+        layers.append(conv_unit(config_channels.channels, config_channels(256, 'layers.%d.pw.conv.weight' % len(layers)), 2))
+        layers.append(conv_unit(config_channels.channels, config_channels(256, 'layers.%d.pw.conv.weight' % len(layers)), 1))
+        layers.append(conv_unit(config_channels.channels, config_channels(512, 'layers.%d.pw.conv.weight' % len(layers)), 2))
+        layers.append(conv_unit(config_channels.channels, config_channels(512, 'layers.%d.pw.conv.weight' % len(layers)), 1))
+        layers.append(conv_unit(config_channels.channels, config_channels(512, 'layers.%d.pw.conv.weight' % len(layers)), 1))
+        layers.append(conv_unit(config_channels.channels, config_channels(512, 'layers.%d.pw.conv.weight' % len(layers)), 1))
+        layers.append(conv_unit(config_channels.channels, config_channels(512, 'layers.%d.pw.conv.weight' % len(layers)), 1))
+        layers.append(conv_unit(config_channels.channels, config_channels(512, 'layers.%d.pw.conv.weight' % len(layers)), 1))
+        layers.append(conv_unit(config_channels.channels, config_channels(1024, 'layers.%d.pw.conv.weight' % len(layers)), 2))
+        layers.append(conv_unit(config_channels.channels, config_channels(1024, 'layers.%d.pw.conv.weight' % len(layers)), 1))
+        layers.append(nn.Conv2d(config_channels.channels, model.output_channels(len(anchors), num_cls), 1))
+        self.layers = nn.Sequential(*layers)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
