@@ -136,6 +136,10 @@ class Darknet(nn.Module):
         x = torch.cat([_x, x], 1)
         return self.layers3(x)
 
+    @staticmethod
+    def scope(name):
+        return '.'.join(name.split('.')[:-2])
+
 
 class Tiny(nn.Module):
     def __init__(self, config_channels, anchors, num_cls):
@@ -166,3 +170,7 @@ class Tiny(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
+
+    @staticmethod
+    def scope(name):
+        return '.'.join(name.split('.')[:-2])

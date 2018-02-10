@@ -67,7 +67,7 @@ class Closure(object):
     )
     format = 'svg'
 
-    def __init__(self, name, state_dict, scope=2, debug=False):
+    def __init__(self, name, state_dict, scope, debug=False):
         self.name = name
         self.state_dict = state_dict
         self.scope = scope
@@ -83,7 +83,7 @@ class Closure(object):
     def __call__(self, node):
         edge = dict(
             mode=Mode.NONE,
-            prefix=self.prefix(self.name),
+            scope=self.scope(self.name),
             offset=0,
         )
         return self.traverse(node, **edge)
@@ -135,14 +135,11 @@ class Closure(object):
             self._draw_tensor(node, tensor, edge)
         return edge
 
-    def prefix(self, name):
-        return '.'.join(name.split('.')[:-self.scope])
-
     def check(self, name, edge):
-        prefix = self.prefix(name)
-        edge = type(self).switch_mode(prefix, edge)
+        scope = self.scope(name)
+        edge = type(self).switch_mode(scope, edge)
         var = self.state_dict[name]
-        if prefix == edge['prefix']:
+        if scope == edge['scope']:
             if edge['mode'] == Mode.OUTPUT:
                 self.output[name] = edge['offset']
             elif edge['mode'] == Mode.INPUT:
@@ -152,12 +149,12 @@ class Closure(object):
         return edge
 
     @staticmethod
-    def switch_mode(prefix, edge):
-        if edge['mode'] == Mode.NONE and prefix == edge['prefix']:
+    def switch_mode(scope, edge):
+        if edge['mode'] == Mode.NONE and scope == edge['scope']:
             edge['mode'] = Mode.OUTPUT
-        elif edge['mode'] == Mode.OUTPUT and prefix != edge['prefix']:
+        elif edge['mode'] == Mode.OUTPUT and scope != edge['scope']:
             edge['mode'] = Mode.INPUT
-            edge['prefix'] = prefix
+            edge['scope'] = scope
         return edge
 
     def _draw_node(self, node, edge):
@@ -217,7 +214,7 @@ class TestYolo2Tiny(unittest.TestCase):
         output = dnn(self.image)
         state_dict = dnn.state_dict()
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
-        closure = Closure(name, state_dict)
+        closure = Closure(name, state_dict, self.model.scope)
         closure(output.grad_fn)
         self.assertDictEqual(closure.output, {
             'layers.14.conv.weight': 0,
@@ -257,7 +254,7 @@ class TestYolo2Darknet(unittest.TestCase):
         output = dnn(self.image)
         state_dict = dnn.state_dict()
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
-        closure = Closure(name, state_dict)
+        closure = Closure(name, state_dict, self.model.scope)
         closure(output.grad_fn)
         self.assertDictEqual(closure.output, {
             'layers1.0.conv.weight': 0,
@@ -282,7 +279,7 @@ class TestYolo2Darknet(unittest.TestCase):
         output = dnn(self.image)
         state_dict = dnn.state_dict()
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
-        closure = Closure(name, state_dict)
+        closure = Closure(name, state_dict, self.model.scope)
         closure(output.grad_fn)
         self.assertDictEqual(closure.output, {
             'layers1.16.conv.weight': 0,
@@ -308,7 +305,7 @@ class TestYolo2Darknet(unittest.TestCase):
         output = dnn(self.image)
         state_dict = dnn.state_dict()
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
-        closure = Closure(name, state_dict)
+        closure = Closure(name, state_dict, self.model.scope)
         closure(output.grad_fn)
         self.assertDictEqual(closure.output, {
             'passthrough.conv.weight': 0,
@@ -333,7 +330,7 @@ class TestYolo2Darknet(unittest.TestCase):
         output = dnn(self.image)
         state_dict = dnn.state_dict()
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
-        closure = Closure(name, state_dict)
+        closure = Closure(name, state_dict, self.model.scope)
         closure(output.grad_fn)
         self.assertDictEqual(closure.output, {
             'layers2.1.conv.weight': 0,
@@ -358,7 +355,7 @@ class TestYolo2Darknet(unittest.TestCase):
         output = dnn(self.image)
         state_dict = dnn.state_dict()
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
-        closure = Closure(name, state_dict)
+        closure = Closure(name, state_dict, self.model.scope)
         closure(output.grad_fn)
         self.assertDictEqual(closure.output, {
             'layers2.7.conv.weight': 0,
