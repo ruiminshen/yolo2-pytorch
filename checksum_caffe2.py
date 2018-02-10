@@ -40,6 +40,13 @@ def main():
     with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
         logging.config.dictConfig(yaml.load(f))
     model_dir = utils.get_model_dir(config)
+    init_net = caffe2_pb2.NetDef()
+    with open(os.path.join(model_dir, 'init_net.pb'), 'rb') as f:
+        init_net.ParseFromString(f.read())
+    predict_net = caffe2_pb2.NetDef()
+    with open(os.path.join(model_dir, 'predict_net.pb'), 'rb') as f:
+        predict_net.ParseFromString(f.read())
+    p = workspace.Predictor(init_net, predict_net)
     height, width = tuple(map(int, config.get('image', 'size').split()))
     resize = transform.parse_transform(config, config.get('transform', 'resize_test'))
     transform_image = transform.get_transform(config, config.get('transform', 'image_test').split())
@@ -49,17 +56,15 @@ def main():
     image_resized = resize(image_bgr, height, width)
     image = transform_image(image_resized)
     tensor = transform_tensor(image).unsqueeze(0)
-    # Caffe2
-    init_net = caffe2_pb2.NetDef()
-    with open(os.path.join(model_dir, 'init_net.pb'), 'rb') as f:
-        init_net.ParseFromString(f.read())
-    predict_net = caffe2_pb2.NetDef()
-    with open(os.path.join(model_dir, 'predict_net.pb'), 'rb') as f:
-        predict_net.ParseFromString(f.read())
-    p = workspace.Predictor(init_net, predict_net)
-    results = p.run([tensor.numpy()])
-    logging.info(utils.abs_mean(results[0]))
-    logging.info(hashlib.md5(results[0].tostring()).hexdigest())
+    # Checksum
+    output = p.run([tensor.numpy()])
+    for key, a in [
+        ('image_bgr', image_bgr),
+        ('image_resized', image_resized),
+        ('tensor', tensor.cpu().numpy()),
+        ('output', output[0]),
+    ]:
+        print('\t'.join(map(str, [key, a.shape, utils.abs_mean(a), hashlib.md5(a.tostring()).hexdigest()])))
 
 
 def make_args():
