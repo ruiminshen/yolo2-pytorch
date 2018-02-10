@@ -15,38 +15,120 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-import math
 import logging
 
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
 import torchvision.models.resnet as _model
-from torchvision.models.resnet import BasicBlock, Bottleneck
+from torchvision.models.resnet import conv3x3
 
 import model
 
 
+class BasicBlock(nn.Module):
+    def __init__(self, config_channels, prefix, channels, stride=1):
+        nn.Module.__init__(self)
+        channels_in = config_channels.channels
+        self.conv1 = conv3x3(config_channels.channels, config_channels(channels, '%s.conv1.weight' % prefix), stride)
+        self.bn1 = nn.BatchNorm2d(config_channels.channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3(config_channels.channels, config_channels(channels, '%s.conv2.weight' % prefix))
+        self.bn2 = nn.BatchNorm2d(config_channels.channels)
+        if stride > 1 or channels_in != config_channels.channels:
+            downsample = []
+            downsample.append(nn.Conv2d(channels_in, config_channels.channels, kernel_size=1, stride=stride, bias=False))
+            downsample.append(nn.BatchNorm2d(config_channels.channels))
+            self.downsample = nn.Sequential(*downsample)
+        else:
+            self.downsample = None
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
+
+class Bottleneck(nn.Module):
+    def __init__(self, config_channels, prefix, channels, stride=1):
+        nn.Module.__init__(self)
+        channels_in = config_channels.channels
+        self.conv1 = nn.Conv2d(config_channels.channels, config_channels(channels, '%s.conv1.weight' % prefix), kernel_size=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(config_channels.channels)
+        self.conv2 = nn.Conv2d(config_channels.channels, config_channels(channels, '%s.conv2.weight' % prefix), kernel_size=3, stride=stride, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(config_channels.channels)
+        self.conv3 = nn.Conv2d(config_channels.channels, config_channels(channels * 4, '%s.conv3.weight' % prefix), kernel_size=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(config_channels.channels)
+        self.relu = nn.ReLU(inplace=True)
+        if stride > 1 or channels_in != config_channels.channels:
+            downsample = []
+            downsample.append(nn.Conv2d(channels_in, config_channels.channels, kernel_size=1, stride=stride, bias=False))
+            downsample.append(nn.BatchNorm2d(config_channels.channels))
+            self.downsample = nn.Sequential(*downsample)
+        else:
+            self.downsample = None
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
+
 class ResNet(_model.ResNet):
     def __init__(self, config_channels, anchors, num_cls, block, layers):
-        self.inplanes = 64
         nn.Module.__init__(self)
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
+        self.conv1 = nn.Conv2d(config_channels.channels, config_channels(64, 'conv1.weight'), kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1 = nn.BatchNorm2d(config_channels.channels)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        self.conv = nn.Conv2d(512, model.output_channels(len(anchors), num_cls), 1)
+        self.layer1 = self._make_layer(config_channels, 'layer1', block, 64, layers[0])
+        self.layer2 = self._make_layer(config_channels, 'layer2', block, 128, layers[1], stride=2)
+        self.layer3 = self._make_layer(config_channels, 'layer3', block, 256, layers[2], stride=2)
+        self.layer4 = self._make_layer(config_channels, 'layer4', block, 512, layers[3], stride=2)
+        self.conv = nn.Conv2d(config_channels.channels, model.output_channels(len(anchors), num_cls), 1)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
+                m.weight = nn.init.kaiming_normal(m.weight)
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
+
+    def _make_layer(self, config_channels, prefix, block, channels, blocks, stride=1):
+        layers = []
+        layers.append(block(config_channels, '%s.%d' % (prefix, len(layers)), channels, stride))
+        for i in range(1, blocks):
+            layers.append(block(config_channels, '%s.%d' % (prefix, len(layers)), channels))
+        return nn.Sequential(*layers)
 
     def forward(self, x):
         x = self.conv1(x)
