@@ -376,6 +376,7 @@ class Train(object):
                             self.save(**kwargs)
                         if self.timer_eval():
                             self.eval(**kwargs)
+                self.save(**kwargs)
                 logging.info('finished')
             except KeyboardInterrupt:
                 logging.warning('interrupted')
