@@ -32,7 +32,7 @@ import xlsxwriter
 
 import utils
 import utils.train
-import utils.walk
+import utils.channel
 
 
 class Name(object):
@@ -60,7 +60,7 @@ class BytesNatural(object):
 
 class MeanDense(object):
     def __call__(self, name, variable):
-        return np.mean(utils.walk.dense(variable))
+        return np.mean(utils.channel.dense(variable))
 
     def format(self, workbook, worksheet, num, col):
         worksheet.conditional_format(1, col, num, col, {'type': 'data_bar', 'bar_color': '#FFC7CE'})

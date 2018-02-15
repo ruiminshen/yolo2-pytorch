@@ -32,7 +32,7 @@ import humanize
 import model
 import utils
 import utils.train
-import utils.walk
+import utils.channel
 
 
 def main():
@@ -58,15 +58,15 @@ def main():
     state_dict = dnn.state_dict()
     d = utils.dense(state_dict[args.name])
     keep = torch.LongTensor(np.argsort(d)[int(len(d) * args.remove):])
-    closure = utils.walk.Closure(
+    modifier = utils.channel.Modifier(
         args.name, state_dict, dnn,
         lambda name, var: var[keep],
         lambda name, var, mapper: var[mapper(keep, len(d))],
         debug=args.debug,
     )
-    closure(output.grad_fn)
+    modifier(output.grad_fn)
     if args.debug:
-        path = closure.dot.view('%s.%s.gv' % (os.path.basename(model_dir), os.path.basename(os.path.splitext(__file__)[0])), os.path.dirname(model_dir))
+        path = modifier.dot.view('%s.%s.gv' % (os.path.basename(model_dir), os.path.basename(os.path.splitext(__file__)[0])), os.path.dirname(model_dir))
         logging.info(path)
     assert len(keep) == len(state_dict[args.name])
     dnn = _model(model.ConfigChannels(config, state_dict), anchors, len(category))

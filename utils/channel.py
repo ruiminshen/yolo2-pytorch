@@ -31,7 +31,7 @@ import model.yolo2
 import utils
 
 
-class Closure(object):
+class Modifier(object):
     node_attr = dict(
         style='filled',
         shape='box',
@@ -289,12 +289,12 @@ class TestYolo2Tiny(unittest.TestCase):
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
         d = utils.dense(state_dict[name])
         keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
-        closure = Closure(
+        modifier = Modifier(
             name, state_dict, dnn,
             lambda name, var: var[keep],
             lambda name, var, mapper: var[mapper(keep, len(d))],
         )
-        closure(output.grad_fn)
+        modifier(output.grad_fn)
         # check channels
         scope = dnn.scope(name)
         self.assertEqual(state_dict[name].size(0), len(keep))
@@ -330,12 +330,12 @@ class TestYolo2Darknet(unittest.TestCase):
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
         d = utils.dense(state_dict[name])
         keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
-        closure = Closure(
+        modifier = Modifier(
             name, state_dict, dnn,
             lambda name, var: var[keep],
             lambda name, var, mapper: var[mapper(keep, len(d))],
         )
-        closure(output.grad_fn)
+        modifier(output.grad_fn)
         # check channels
         scope = dnn.scope(name)
         self.assertEqual(state_dict[name].size(0), len(keep))
@@ -356,12 +356,12 @@ class TestYolo2Darknet(unittest.TestCase):
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
         d = utils.dense(state_dict[name])
         keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
-        closure = Closure(
+        modifier = Modifier(
             name, state_dict, dnn,
             lambda name, var: var[keep],
             lambda name, var, mapper: var[mapper(keep, len(d))],
         )
-        closure(output.grad_fn)
+        modifier(output.grad_fn)
         # check channels
         scope = dnn.scope(name)
         self.assertEqual(state_dict[name].size(0), len(keep))
@@ -382,12 +382,12 @@ class TestYolo2Darknet(unittest.TestCase):
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
         d = utils.dense(state_dict[name])
         keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
-        closure = Closure(
+        modifier = Modifier(
             name, state_dict, dnn,
             lambda name, var: var[keep],
             lambda name, var, mapper: var[mapper(keep, len(d))],
         )
-        closure(output.grad_fn)
+        modifier(output.grad_fn)
         # check channels
         scope = dnn.scope(name)
         self.assertEqual(state_dict[name].size(0), len(keep))
@@ -408,12 +408,12 @@ class TestYolo2Darknet(unittest.TestCase):
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
         d = utils.dense(state_dict[name])
         keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
-        closure = Closure(
+        modifier = Modifier(
             name, state_dict, dnn,
             lambda name, var: var[keep],
             lambda name, var, mapper: var[mapper(keep, len(d))],
         )
-        closure(output.grad_fn)
+        modifier(output.grad_fn)
         # check channels
         scope = dnn.scope(name)
         self.assertEqual(state_dict[name].size(0), len(keep))
@@ -434,12 +434,38 @@ class TestYolo2Darknet(unittest.TestCase):
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
         d = utils.dense(state_dict[name])
         keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
-        closure = Closure(
+        modifier = Modifier(
             name, state_dict, dnn,
             lambda name, var: var[keep],
             lambda name, var, mapper: var[mapper(keep, len(d))],
         )
-        closure(output.grad_fn)
+        modifier(output.grad_fn)
+        # check channels
+        scope = dnn.scope(name)
+        self.assertEqual(state_dict[name].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.weight'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.bias'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_mean'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_var'].size(0), len(keep))
+        # check if runnable
+        config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
+        dnn = self.model(config_channels, self.anchors, len(self.category))
+        dnn.load_state_dict(state_dict)
+        dnn(self.image)
+
+    def test_layers3_0_conv_weight(self):
+        dnn = self.model(self.config_channels, self.anchors, len(self.category))
+        output = dnn(self.image)
+        state_dict = dnn.state_dict()
+        name = '.'.join(self.id().split('.')[-1].split('_')[1:])
+        d = utils.dense(state_dict[name])
+        keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
+        modifier = Modifier(
+            name, state_dict, dnn,
+            lambda name, var: var[keep],
+            lambda name, var, mapper: var[mapper(keep, len(d))],
+        )
+        modifier(output.grad_fn)
         # check channels
         scope = dnn.scope(name)
         self.assertEqual(state_dict[name].size(0), len(keep))
