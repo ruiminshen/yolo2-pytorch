@@ -17,40 +17,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import inspect
 import collections
-import enum
 import copy
 import unittest
 import configparser
-import logging
 
 import numpy as np
 import torch
 import humanize
 import graphviz
 
+import model.inception4
 import model.yolo2
 import utils
-
-
-def prune(modifier, channels):
-    for name in modifier.output:
-        offset = modifier.output[name]
-        var = modifier.state_dict[name]
-        var = var[channels]
-        logging.info('prune output channels of %s from %s to %s with offset %d' % (name, 'x'.join(map(str, modifier.state_dict[name].size())), 'x'.join(map(str, var.size())), offset))
-        modifier.state_dict[name] = var
-    for name in modifier.input:
-        offset = modifier.input[name]
-        var = modifier.state_dict[name]
-        var = torch.stack([v[channels] for v in torch.unbind(var)])
-        logging.info('prune input channels of %s from %s to %s with offset %d' % (name, 'x'.join(map(str, modifier.state_dict[name].size())), 'x'.join(map(str, var.size())), offset))
-        modifier.state_dict[name] = var
-
-
-class Mode(enum.IntEnum):
-    NONE = 0
-    OUTPUT = 1
-    INPUT = 2
 
 
 class Closure(object):
@@ -67,132 +45,227 @@ class Closure(object):
     )
     format = 'svg'
 
-    def __init__(self, name, state_dict, scope, debug=False):
+    def __init__(self, name, state_dict, model, modify_output, modify_input, debug=False):
         self.name = name
         self.state_dict = state_dict
-        self.scope = scope
+        self.model = model
+        self.modify_output = modify_output
+        self.modify_input = modify_input
         if debug:
             self.dot = graphviz.Digraph(node_attr=self.node_attr, graph_attr=self.graph_attr)
             self.dot.format = self.format
         self.var_name = {t._cdata: k for k, t in state_dict.items()}
         self.seen = collections.OrderedDict()
         self.index = 0
-        self.output = collections.OrderedDict()
-        self.input = collections.OrderedDict()
 
     def __call__(self, node):
         edge = dict(
-            mode=Mode.NONE,
-            scope=self.scope(self.name),
-            offset=0,
+            scope=self.model.scope(self.name),
         )
         return self.traverse(node, **edge)
 
-    def traverse(self, node, **edge):
+    def traverse(self, node, **edge_init):
         if node in self.seen:
             return self.seen[node]
         else:
-            edge = self.traverse_next(node, edge)
-            if hasattr(node, 'variable'):
-                name = self.var_name[node.variable.data._cdata]
-                edge = self.check(name, edge)
-            edge = self.traverse_tensor(node, edge)
+            inputs, edge = self.merge_edges(node, edge_init)
+            edge = self.traverse_vars(node, edge)
             edge['index'] = self.index
-            self.seen[node] = copy.copy(edge)
+            if hasattr(self, 'dot'):
+                for input in inputs:
+                    self._draw_node_edge(node, input)
+                self._draw_node(node, edge)
+            edge = copy.deepcopy(edge)
+            self.seen[node] = edge
             self.index += 1
         return edge
 
-    def traverse_next(self, node, edge):
+    def merge_edges(self, node, edge_init):
+        edge = copy.deepcopy(edge_init)
+        edge_init.pop('_modify', None)
         if hasattr(node, 'next_functions'):
-            _edges = []
-            _edge = edge
-            for n, _ in node.next_functions:
-                if n is not None:
-                    _edge = self._draw_node_edge(node, n, _edge, self.traverse(n, **_edge))
-                    _edges.append(_edge)
-            if _edges:
-                if type(node).__name__ == 'CatBackward':
-                    edge['channels'] = sum(map(lambda edge: edge['channels'], _edges))
-                else:
-                    edge['channels'] = _edges[0]['channels']
-                modes = list(map(lambda edge: edge['mode'], _edges))
-                mode = max(modes)
-                if mode != edge['mode']:
-                    edge['mode'] = mode
-                    if type(node).__name__ == 'CatBackward':
-                        for e in _edges[:modes.index(mode)]:
-                            edge['offset'] += e['channels']
-        self._draw_node(node, edge)
-        return edge
+            inputs = []
+            for _node, _ in node.next_functions:
+                if _node is not None:
+                    _edge = self.traverse(_node, **edge_init)
+                    if 'modify' in _edge:
+                        edge_init['_modify'] = copy.deepcopy(_edge['modify'])
+                    inputs.append(dict(
+                        node=_node,
+                        edge=_edge,
+                    ))
+            if inputs:
+                for key in 'channels, _channels'.split(', '):
+                    edge[key] = self.merge_channels(node, inputs, key)
+                self.merge_modify(node, inputs, edge)
+        return inputs, edge
 
-    def traverse_tensor(self, node, edge):
+    def merge_channels(self, node, inputs, key):
+        name = type(node).__name__
+        if name == 'CatBackward':
+            channels = sum(map(lambda input: input['edge'][key], inputs))
+        else:
+            channels = inputs[-1]['edge'][key]
+        if hasattr(self.model, 'get_mapper'):
+            mapper = self.model.get_mapper(self.index)
+            if mapper is not None:
+                indices = torch.LongTensor(np.arange(channels))
+                indices = mapper(indices, channels)
+                channels = len(indices)
+        return channels
+
+    def merge_modify(self, node, inputs, edge):
+        for index, input in enumerate(inputs):
+            _edge = input['edge']
+            if 'modify' in _edge:
+                modify = copy.deepcopy(_edge['modify'])
+                if 'modify' in edge:
+                    if 'scope' in modify:
+                        edge['modify']['scope'] = modify['scope']
+                else:
+                    begin, end = modify['range']
+                    name = type(node).__name__
+                    if name == 'CatBackward':
+                        offset = sum(map(lambda input: input['edge']['_channels'], inputs[:index]))
+                        begin += offset
+                        end += offset
+                    if hasattr(self.model, 'get_mapper'):
+                        mapper = self.model.get_mapper(self.index)
+                        if mapper is not None:
+                            channels = end - begin
+                            indices = torch.LongTensor(np.arange(channels))
+                            indices = mapper(indices, channels)
+                            channels = len(indices)
+                            end = begin + channels
+                            modify['mappers'].append(mapper)
+                    modify['range'] = (begin, end)
+                    edge['modify'] = modify
+
+    def traverse_vars(self, node, edge):
+        if hasattr(node, 'variable'):
+            name = self.var_name[node.variable.data._cdata]
+            edge = self.modify(name, edge)
         tensors = [t for name, t in inspect.getmembers(node) if torch.is_tensor(t)]
         if hasattr(node, 'saved_tensors'):
             tensors += node.saved_tensors
         for tensor in tensors:
             name = self.var_name[tensor._cdata]
-            edge = self.check(name, edge)
-            self._draw_tensor(node, tensor, edge)
+            edge = self.modify(name, edge)
+            if hasattr(self, 'dot'):
+                self._draw_tensor(node, tensor, edge)
         return edge
 
-    def check(self, name, edge):
-        scope = self.scope(name)
-        edge = type(self).switch_mode(scope, edge)
+    def modify(self, name, edge):
+        scope = self.model.scope(name)
         var = self.state_dict[name]
+        edge['_channels'] = var.size(0)
         if scope == edge['scope']:
-            if edge['mode'] == Mode.OUTPUT:
-                self.output[name] = edge['offset']
-            elif edge['mode'] == Mode.INPUT:
+            edge['_size'] = var.size()
+            edge['modify'] = dict(
+                range=(0, var.size(0)),
+                mappers=[],
+            )
+            var = self.modify_output(name, var)
+        elif '_modify' in edge:
+            modify = edge['_modify']
+            if 'scope' not in modify:
+                modify['scope'] = scope
+            if 'scope' in modify and modify['scope'] == scope:
                 if len(var.size()) > 1:
-                    self.input[name] = edge['offset']
+                    edge['_size'] = var.size()
+                    begin, end = modify['range']
+                    def mapper(indices, channels):
+                        for m in modify['mappers']:
+                            indices = m(indices, channels)
+                        return indices
+                    vars = []
+                    for v in torch.unbind(var):
+                        comp = []
+                        if begin > 0:
+                            comp.append(v[:begin])
+                        _v = v[begin:end]
+                        _v = self.modify_input(name, _v, mapper)
+                        comp.append(_v)
+                        if end < var.size(1):
+                            comp.append(v[end:])
+                        v = torch.cat(comp)
+                        vars.append(v)
+                    var = torch.stack(vars)
+                    edge['modify'] = modify
+            else:
+                edge.pop('modify', None)
         edge['channels'] = var.size(0)
-        return edge
-
-    @staticmethod
-    def switch_mode(scope, edge):
-        if edge['mode'] == Mode.NONE and scope == edge['scope']:
-            edge['mode'] = Mode.OUTPUT
-        elif edge['mode'] == Mode.OUTPUT and scope != edge['scope']:
-            edge['mode'] = Mode.INPUT
-            edge['scope'] = scope
+        self.state_dict[name] = var
         return edge
 
     def _draw_node(self, node, edge):
-        if not hasattr(self, 'dot'):
-            return
         if hasattr(node, 'variable'):
-            tensor = node.variable.data
-            name = self.var_name[tensor._cdata]
-            label = '\n'.join(map(str, [
-                '%d: %s (%s)' % (self.index, name, str(edge['mode']).split('.')[-1]),
-                list(tensor.size()),
+            name = self.var_name[node.variable.data._cdata]
+            tensor = self.state_dict[name]
+            label = '\n'.join(map(str, filter(lambda x: x is not None, [
+                '%d: %s' % (self.index, name),
+                type(self)._pretty_size(tensor.size(), edge),
                 humanize.naturalsize(tensor.numpy().nbytes),
-            ]))
+            ])))
             self.dot.node(str(id(node)), label, shape='note')
         else:
-            self.dot.node(str(id(node)), '%d: %s (%s)' % (self.index, type(node).__name__, str(edge['mode']).split('.')[-1]), fillcolor='white')
+            name = type(node).__name__
+            label = '%d: %s' % (self.index, name)
+            self.dot.node(str(id(node)), label, fillcolor='white')
 
-    def _draw_node_edge(self, node, n, edge_before, edge_after):
-        if not hasattr(self, 'dot'):
-            return edge_after
-        label = '%s->%s' % (str(edge_before['mode']).split('.')[-1], str(edge_after['mode']).split('.')[-1])
-        if hasattr(n, 'variable'):
-            self.dot.edge(str(id(n)), str(id(node)), label, arrowhead='none', arrowtail='none')
+    def _draw_node_edge(self, node, input):
+        _node = input['node']
+        edge = input['edge']
+        channels, _channels = (edge[key] for key in 'channels, _channels'.split(', '))
+        label = '\n'.join(map(str, filter(lambda x: x is not None, [
+            channels if channels == _channels else '%d->%d' % (_channels, channels),
+            type(self)._pretty_modify(edge),
+        ])))
+        if hasattr(_node, 'variable'):
+            self.dot.edge(str(id(_node)), str(id(node)), label, arrowhead='none', arrowtail='none')
         else:
-            self.dot.edge(str(id(n)), str(id(node)), label)
-        return edge_after
+            self.dot.edge(str(id(_node)), str(id(node)), label)
 
     def _draw_tensor(self, node, tensor, edge):
-        if not hasattr(self, 'dot'):
-            return
         name = self.var_name[tensor._cdata]
-        label = '\n'.join(map(str, [
+        tensor = self.state_dict[name]
+        label = '\n'.join(map(str, filter(lambda x: x is not None, [
             name,
-            list(tensor.size()),
+            type(self)._pretty_size(tensor.size(), edge),
             humanize.naturalsize(tensor.numpy().nbytes),
-        ]))
+        ])))
         self.dot.node(name, label, style='filled, rounded')
-        self.dot.edge(name, str(id(node)), str(edge['mode']).split('.')[-1], style='dashed', arrowhead='none', arrowtail='none')
+        channels, _channels = (edge[key] for key in 'channels, _channels'.split(', '))
+        label = '\n'.join(map(str, filter(lambda x: x is not None, [
+            channels if channels == _channels else '%d->%d' % (_channels, channels),
+            type(self)._pretty_modify(edge),
+        ])))
+        self.dot.edge(name, str(id(node)), label, style='dashed', arrowhead='none', arrowtail='none')
+
+    @staticmethod
+    def _pretty_size(size, edge):
+        if '_size' in edge:
+            comp = []
+            for _s, s in zip(edge['_size'], size):
+                if s == _s:
+                    content = str(s)
+                elif 'range' in edge:
+                    begin, end = edge['range']
+                    content = '%d[%d:%d]->%d' % (_s, begin, end, s)
+                else:
+                    content = '%d->%d' % (_s, s)
+                comp.append(content)
+            return ', '.join(comp)
+        else:
+            return ', '.join(map(str, size))
+
+    @staticmethod
+    def _pretty_modify(edge):
+        if 'modify' in edge:
+            modify = edge['modify']
+            mode = 'input' if 'scope' in modify else 'output'
+            begin, end = modify['range']
+            return '%s[%d:%d]' % (mode, begin, end)
 
 
 class TestYolo2Tiny(unittest.TestCase):
@@ -214,25 +287,26 @@ class TestYolo2Tiny(unittest.TestCase):
         output = dnn(self.image)
         state_dict = dnn.state_dict()
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
-        closure = Closure(name, state_dict, self.model.scope)
-        closure(output.grad_fn)
-        self.assertDictEqual(closure.output, {
-            'layers.14.conv.weight': 0,
-            'layers.14.bn.weight': 0,
-            'layers.14.bn.bias': 0,
-            'layers.14.bn.running_mean': 0,
-            'layers.14.bn.running_var': 0,
-        })
-        self.assertDictEqual(closure.input, {
-            'layers.15.conv.weight': 0,
-        })
         d = utils.dense(state_dict[name])
-        channels = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
-        prune(closure, channels)
+        keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
+        closure = Closure(
+            name, state_dict, dnn,
+            lambda name, var: var[keep],
+            lambda name, var, mapper: var[mapper(keep, len(d))],
+        )
+        closure(output.grad_fn)
+        # check channels
+        scope = dnn.scope(name)
+        self.assertEqual(state_dict[name].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.weight'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.bias'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_mean'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_var'].size(0), len(keep))
+        # check if runnable
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
         dnn = self.model(config_channels, self.anchors, len(self.category))
+        dnn.load_state_dict(state_dict)
         dnn(self.image)
-        self.assertEqual(len(channels), len(dnn.state_dict()[name]))
 
 
 class TestYolo2Darknet(unittest.TestCase):
@@ -254,126 +328,130 @@ class TestYolo2Darknet(unittest.TestCase):
         output = dnn(self.image)
         state_dict = dnn.state_dict()
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
-        closure = Closure(name, state_dict, self.model.scope)
-        closure(output.grad_fn)
-        self.assertDictEqual(closure.output, {
-            'layers1.0.conv.weight': 0,
-            'layers1.0.bn.weight': 0,
-            'layers1.0.bn.bias': 0,
-            'layers1.0.bn.running_mean': 0,
-            'layers1.0.bn.running_var': 0,
-        })
-        self.assertDictEqual(closure.input, {
-            'layers1.2.conv.weight': 0,
-        })
         d = utils.dense(state_dict[name])
-        channels = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
-        prune(closure, channels)
+        keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
+        closure = Closure(
+            name, state_dict, dnn,
+            lambda name, var: var[keep],
+            lambda name, var, mapper: var[mapper(keep, len(d))],
+        )
+        closure(output.grad_fn)
+        # check channels
+        scope = dnn.scope(name)
+        self.assertEqual(state_dict[name].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.weight'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.bias'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_mean'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_var'].size(0), len(keep))
+        # check if runnable
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
         dnn = self.model(config_channels, self.anchors, len(self.category))
+        dnn.load_state_dict(state_dict)
         dnn(self.image)
-        self.assertEqual(len(channels), len(dnn.state_dict()[name]))
 
     def test_layers1_16_conv_weight(self):
         dnn = self.model(self.config_channels, self.anchors, len(self.category))
         output = dnn(self.image)
         state_dict = dnn.state_dict()
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
-        closure = Closure(name, state_dict, self.model.scope)
-        closure(output.grad_fn)
-        self.assertDictEqual(closure.output, {
-            'layers1.16.conv.weight': 0,
-            'layers1.16.bn.weight': 0,
-            'layers1.16.bn.bias': 0,
-            'layers1.16.bn.running_mean': 0,
-            'layers1.16.bn.running_var': 0,
-        })
-        self.assertDictEqual(closure.input, {
-            'passthrough.conv.weight': 0,
-            'layers2.1.conv.weight': 0,
-        })
         d = utils.dense(state_dict[name])
-        channels = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
-        prune(closure, channels)
+        keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
+        closure = Closure(
+            name, state_dict, dnn,
+            lambda name, var: var[keep],
+            lambda name, var, mapper: var[mapper(keep, len(d))],
+        )
+        closure(output.grad_fn)
+        # check channels
+        scope = dnn.scope(name)
+        self.assertEqual(state_dict[name].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.weight'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.bias'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_mean'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_var'].size(0), len(keep))
+        # check if runnable
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
         dnn = self.model(config_channels, self.anchors, len(self.category))
+        dnn.load_state_dict(state_dict)
         dnn(self.image)
-        self.assertEqual(len(channels), len(dnn.state_dict()[name]))
 
     def test_passthrough_conv_weight(self):
         dnn = self.model(self.config_channels, self.anchors, len(self.category))
         output = dnn(self.image)
         state_dict = dnn.state_dict()
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
-        closure = Closure(name, state_dict, self.model.scope)
-        closure(output.grad_fn)
-        self.assertDictEqual(closure.output, {
-            'passthrough.conv.weight': 0,
-            'passthrough.bn.weight': 0,
-            'passthrough.bn.bias': 0,
-            'passthrough.bn.running_mean': 0,
-            'passthrough.bn.running_var': 0,
-        })
-        self.assertDictEqual(closure.input, {
-            'layers3.0.conv.weight': 0,
-        })
         d = utils.dense(state_dict[name])
-        channels = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
-        prune(closure, channels)
+        keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
+        closure = Closure(
+            name, state_dict, dnn,
+            lambda name, var: var[keep],
+            lambda name, var, mapper: var[mapper(keep, len(d))],
+        )
+        closure(output.grad_fn)
+        # check channels
+        scope = dnn.scope(name)
+        self.assertEqual(state_dict[name].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.weight'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.bias'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_mean'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_var'].size(0), len(keep))
+        # check if runnable
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
         dnn = self.model(config_channels, self.anchors, len(self.category))
+        dnn.load_state_dict(state_dict)
         dnn(self.image)
-        self.assertEqual(len(channels), len(dnn.state_dict()[name]))
 
     def test_layers2_1_conv_weight(self):
         dnn = self.model(self.config_channels, self.anchors, len(self.category))
         output = dnn(self.image)
         state_dict = dnn.state_dict()
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
-        closure = Closure(name, state_dict, self.model.scope)
-        closure(output.grad_fn)
-        self.assertDictEqual(closure.output, {
-            'layers2.1.conv.weight': 0,
-            'layers2.1.bn.weight': 0,
-            'layers2.1.bn.bias': 0,
-            'layers2.1.bn.running_mean': 0,
-            'layers2.1.bn.running_var': 0,
-        })
-        self.assertDictEqual(closure.input, {
-            'layers2.2.conv.weight': 0,
-        })
         d = utils.dense(state_dict[name])
-        channels = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
-        prune(closure, channels)
+        keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
+        closure = Closure(
+            name, state_dict, dnn,
+            lambda name, var: var[keep],
+            lambda name, var, mapper: var[mapper(keep, len(d))],
+        )
+        closure(output.grad_fn)
+        # check channels
+        scope = dnn.scope(name)
+        self.assertEqual(state_dict[name].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.weight'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.bias'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_mean'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_var'].size(0), len(keep))
+        # check if runnable
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
         dnn = self.model(config_channels, self.anchors, len(self.category))
+        dnn.load_state_dict(state_dict)
         dnn(self.image)
-        self.assertEqual(len(channels), len(dnn.state_dict()[name]))
 
     def test_layers2_7_conv_weight(self):
         dnn = self.model(self.config_channels, self.anchors, len(self.category))
         output = dnn(self.image)
         state_dict = dnn.state_dict()
         name = '.'.join(self.id().split('.')[-1].split('_')[1:])
-        closure = Closure(name, state_dict, self.model.scope)
-        closure(output.grad_fn)
-        self.assertDictEqual(closure.output, {
-            'layers2.7.conv.weight': 0,
-            'layers2.7.bn.weight': 0,
-            'layers2.7.bn.bias': 0,
-            'layers2.7.bn.running_mean': 0,
-            'layers2.7.bn.running_var': 0,
-        })
-        self.assertDictEqual(closure.input, {
-            'layers3.0.conv.weight': 64,
-        })
         d = utils.dense(state_dict[name])
-        channels = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
-        prune(closure, channels)
+        keep = torch.LongTensor(np.argsort(d)[int(len(d) * 0.5):])
+        closure = Closure(
+            name, state_dict, dnn,
+            lambda name, var: var[keep],
+            lambda name, var, mapper: var[mapper(keep, len(d))],
+        )
+        closure(output.grad_fn)
+        # check channels
+        scope = dnn.scope(name)
+        self.assertEqual(state_dict[name].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.weight'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.bias'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_mean'].size(0), len(keep))
+        self.assertEqual(state_dict[scope + '.bn.running_var'].size(0), len(keep))
+        # check if runnable
         config_channels = model.ConfigChannels(self.config_channels.config, state_dict)
         dnn = self.model(config_channels, self.anchors, len(self.category))
+        dnn.load_state_dict(state_dict)
         dnn(self.image)
-        self.assertEqual(len(channels), len(dnn.state_dict()[name]))
 
 
 if __name__ == '__main__':

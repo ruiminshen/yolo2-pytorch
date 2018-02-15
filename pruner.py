@@ -48,22 +48,31 @@ def main():
     anchors = torch.from_numpy(utils.get_anchors(config)).contiguous()
     path, step, epoch = utils.train.load_model(model_dir)
     state_dict = torch.load(path, map_location=lambda storage, loc: storage)
-    dnn = utils.parse_attr(config.get('model', 'dnn'))(model.ConfigChannels(config, state_dict), anchors, len(category))
+    _model = utils.parse_attr(config.get('model', 'dnn'))
+    dnn = _model(model.ConfigChannels(config, state_dict), anchors, len(category))
     logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in dnn.state_dict().values())))
     dnn.load_state_dict(state_dict)
     height, width = tuple(map(int, config.get('image', 'size').split()))
     image = torch.autograd.Variable(torch.randn(args.batch_size, 3, height, width))
     output = dnn(image)
     state_dict = dnn.state_dict()
-    closure = utils.walk.Closure(args.name, state_dict, type(dnn).scope, args.debug)
-    closure(output.grad_fn)
     d = utils.dense(state_dict[args.name])
-    channels = torch.LongTensor(np.argsort(d)[int(len(d) * args.remove):])
-    utils.walk.prune(closure, channels)
+    keep = torch.LongTensor(np.argsort(d)[int(len(d) * args.remove):])
+    closure = utils.walk.Closure(
+        args.name, state_dict, dnn,
+        lambda name, var: var[keep],
+        lambda name, var, mapper: var[mapper(keep, len(d))],
+        debug=args.debug,
+    )
+    closure(output.grad_fn)
     if args.debug:
-        path = closure.dot.view(os.path.basename(model_dir) + '.gv', os.path.dirname(model_dir))
+        path = closure.dot.view('%s.%s.gv' % (os.path.basename(model_dir), os.path.basename(os.path.splitext(__file__)[0])), os.path.dirname(model_dir))
         logging.info(path)
-    else:
+    assert len(keep) == len(state_dict[args.name])
+    dnn = _model(model.ConfigChannels(config, state_dict), anchors, len(category))
+    dnn.load_state_dict(state_dict)
+    dnn(image)
+    if not args.debug:
         torch.save(state_dict, path)
 
 

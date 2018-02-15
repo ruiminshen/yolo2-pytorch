@@ -136,9 +136,12 @@ class Darknet(nn.Module):
         x = torch.cat([_x, x], 1)
         return self.layers3(x)
 
-    @staticmethod
-    def scope(name):
+    def scope(self, name):
         return '.'.join(name.split('.')[:-2])
+
+    def get_mapper(self, index):
+        if index == 94:
+            return lambda indices, channels: torch.cat([indices + i * channels for i in range(self.stride * self.stride)])
 
 
 class Tiny(nn.Module):
@@ -171,6 +174,5 @@ class Tiny(nn.Module):
     def forward(self, x):
         return self.layers(x)
 
-    @staticmethod
-    def scope(name):
+    def scope(self, name):
         return '.'.join(name.split('.')[:-2])

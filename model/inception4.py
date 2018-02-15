@@ -311,6 +311,5 @@ class Inception4(nn.Module):
     def forward(self, x):
         return self.features(x)
 
-    @staticmethod
-    def scope(name):
+    def scope(self, name):
         return '.'.join(name.split('.')[:-2])
