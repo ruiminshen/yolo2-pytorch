@@ -16,6 +16,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import logging
+import configparser
 
 import torch
 import torch.nn as nn
@@ -288,8 +289,14 @@ class Inception4(nn.Module):
         features.append(nn.Conv2d(config_channels.channels, model.output_channels(len(anchors), num_cls), 1))
         self.features = nn.Sequential(*features)
 
-        gamma = config_channels.config.getboolean('batch_norm', 'gamma')
-        beta = config_channels.config.getboolean('batch_norm', 'beta')
+        try:
+            gamma = config_channels.config.getboolean('batch_norm', 'gamma')
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            gamma = True
+        try:
+            beta = config_channels.config.getboolean('batch_norm', 'beta')
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            beta = True
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 m.weight = nn.init.kaiming_normal(m.weight)
@@ -298,15 +305,17 @@ class Inception4(nn.Module):
                 m.bias.data.zero_()
                 m.weight.requires_grad = gamma
                 m.bias.requires_grad = beta
-
-        if config_channels.config.getboolean('model', 'pretrained'):
-            settings = pretrained_settings['inceptionv4'][config_channels.config.get('inception4', 'pretrained')]
-            logging.info('use pretrained model: ' + str(settings))
-            state_dict = self.state_dict()
-            for key, value in torch.utils.model_zoo.load_url(settings['url']).items():
-                if key in state_dict:
-                    state_dict[key] = value
-            self.load_state_dict(state_dict)
+        try:
+            if config_channels.config.getboolean('model', 'pretrained'):
+                settings = pretrained_settings['inceptionv4'][config_channels.config.get('inception4', 'pretrained')]
+                logging.info('use pretrained model: ' + str(settings))
+                state_dict = self.state_dict()
+                for key, value in torch.utils.model_zoo.load_url(settings['url']).items():
+                    if key in state_dict:
+                        state_dict[key] = value
+                self.load_state_dict(state_dict)
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            pass
 
     def forward(self, x):
         return self.features(x)
