@@ -57,7 +57,7 @@ def main():
     output = dnn(image)
     state_dict = dnn.state_dict()
     d = utils.dense(state_dict[args.name])
-    keep = torch.LongTensor(np.argsort(d)[int(len(d) * args.remove):])
+    keep = torch.LongTensor(np.argsort(d)[:int(len(d) * args.keep)])
     modifier = utils.channel.Modifier(
         args.name, state_dict, dnn,
         lambda name, var: var[keep],
@@ -79,7 +79,7 @@ def main():
 def make_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('name')
-    parser.add_argument('remove', type=float)
+    parser.add_argument('keep', type=float)
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
     parser.add_argument('-b', '--batch_size', default=1, type=int, help='batch size')
