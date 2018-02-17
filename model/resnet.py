@@ -16,6 +16,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import logging
+import re
 
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
@@ -142,6 +143,20 @@ class ResNet(_model.ResNet):
         x = self.layer4(x)
 
         return self.conv(x)
+
+    def scope(self, name):
+        comp = name.split('.')[:-1]
+        try:
+            comp[-1] = re.search('[(conv)|(bn)](\d+)', comp[-1]).group(1)
+        except AttributeError:
+            if len(comp) > 1:
+                if comp[-2] == 'downsample':
+                    comp = comp[:-1]
+                else:
+                    assert False, name
+            else:
+                assert comp[-1] == 'conv', name
+        return '.'.join(comp)
 
 
 def resnet18(config_channels, anchors, num_cls, **kwargs):
