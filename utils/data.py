@@ -93,6 +93,7 @@ class Dataset(torch.utils.data.Dataset):
                 name = self.__module__ + '.' + type(self).__name__
                 with open(os.path.join(self.dir, name + '.pkl'), 'wb') as f:
                     pickle.dump(data, f)
+            raise
         return data
 
 
