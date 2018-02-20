@@ -25,7 +25,10 @@ import cv2
 def naive(image, yx_min, yx_max, height, width):
     _height, _width = image.shape[:2]
     scale = np.array([height / _height, width / _width], np.float32)
-    return cv2.resize(image, (width, height)), yx_min * scale, yx_max * scale
+    image = cv2.resize(image, (width, height))
+    yx_min *= scale
+    yx_max *= scale
+    return image, yx_min, yx_max
 
 
 class Naive(object):
@@ -44,8 +47,7 @@ def random_crop(config, image, yx_min, yx_max, height, width):
     size = image.shape[:2]
     _yx_min = np.min(yx_min, 0)
     _yx_max = np.max(yx_max, 0)
-    margin = size - _yx_max
-    shrink = scale * np.random.rand(4) * np.concatenate([_yx_min, margin], 0)
+    shrink = scale * np.random.rand(4) * np.concatenate([_yx_min, size - _yx_max], 0)
     _yx_min = shrink[:2].astype(yx_min.dtype)
     _yx_max = size - shrink[2:].astype(yx_max.dtype)
     _ymin, _xmin = _yx_min
