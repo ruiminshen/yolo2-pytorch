@@ -44,12 +44,13 @@ def random_crop(config, image, yx_min, yx_max, height, width):
     name = inspect.stack()[0][3]
     scale = config.getfloat('augmentation', name)
     assert 0 < scale <= 1
-    size = image.shape[:2]
     _yx_min = np.min(yx_min, 0)
     _yx_max = np.max(yx_max, 0)
-    shrink = scale * np.random.rand(4) * np.concatenate([_yx_min, size - _yx_max], 0)
-    _yx_min = shrink[:2].astype(yx_min.dtype)
-    _yx_max = size - shrink[2:].astype(yx_max.dtype)
+    dtype = yx_min.dtype
+    size = np.array(image.shape[:2], dtype)
+    margin = scale * np.random.rand(4).astype(dtype) * np.concatenate([_yx_min, size - _yx_max], 0)
+    _yx_min = margin[:2]
+    _yx_max = size - margin[2:]
     _ymin, _xmin = _yx_min
     _ymax, _xmax = _yx_max
     _ymin, _xmin, _ymax, _xmax = tuple(map(int, (_ymin, _xmin, _ymax, _xmax)))

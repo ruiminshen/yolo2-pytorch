@@ -37,15 +37,10 @@ def padding_labels(data, dim, labels='yx_min, yx_max, cls, difficult'.split(', '
     :param labels: The list of label names.
     :return: The padded label dict.
     """
-    pad = dim - len(data['cls'])
+    pad = dim - len(data[labels[0]])
     for key in labels:
         label = data[key]
-        if isinstance(label, np.ndarray):
-            if len(label.shape) == 1:
-                label = np.pad(label, [(0, pad)], 'constant')
-            elif len(label.shape) == 2:
-                label = np.pad(label, [(0, pad), (0, 0)], 'constant')
-        data[key] = label
+        data[key] = np.pad(label, [(0, pad)] + [(0, 0)] * (len(label.shape) - 1), 'constant')
     return data
 
 
