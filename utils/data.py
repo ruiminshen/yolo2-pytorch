@@ -26,28 +26,26 @@ import sklearn.preprocessing
 import torch.utils.data
 
 import transform.resize.label
-import utils
 
 
-def padding_labels(data, dim, ignore=set(['size', 'image'])):
+def padding_labels(data, dim, labels='yx_min, yx_max, cls, difficult'.split(', ')):
     """
     Padding labels into the same dimension (to form a batch).
     :author 申瑞珉 (Ruimin Shen)
     :param data: A dict contains the labels to be padded.
     :param dim: The target dimension.
-    :param ignore: The labels shouldn't be padded.
+    :param labels: The list of label names.
     :return: The padded label dict.
     """
     pad = dim - len(data['cls'])
-    for key in data:
-        if key not in ignore:
-            label = data[key]
-            if isinstance(label, np.ndarray):
-                if len(label.shape) == 1:
-                    label = np.pad(label, [(0, pad)], 'constant')
-                elif len(label.shape) == 2:
-                    label = np.pad(label, [(0, pad), (0, 0)], 'constant')
-            data[key] = label
+    for key in labels:
+        label = data[key]
+        if isinstance(label, np.ndarray):
+            if len(label.shape) == 1:
+                label = np.pad(label, [(0, pad)], 'constant')
+            elif len(label.shape) == 2:
+                label = np.pad(label, [(0, pad), (0, 0)], 'constant')
+        data[key] = label
     return data
 
 
