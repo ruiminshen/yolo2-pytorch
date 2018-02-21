@@ -48,7 +48,7 @@ def main():
     try:
         path, step, epoch = utils.train.load_model(model_dir)
         state_dict = torch.load(path, map_location=lambda storage, loc: storage)
-    except ValueError:
+    except (FileNotFoundError, ValueError):
         logging.warning('model cannot be loaded')
         state_dict = None
     dnn = utils.parse_attr(config.get('model', 'dnn'))(model.ConfigChannels(config, state_dict), anchors, len(category))
