@@ -277,9 +277,9 @@ class Train(object):
         except configparser.NoOptionError:
             workers = multiprocessing.cpu_count()
         collate_fn = utils.data.Collate(
+            transform.parse_transform(self.config, self.config.get('transform', 'resize_train')),
             utils.train.load_sizes(self.config),
-            self.config.getint('data', 'maintain'),
-            resize=transform.parse_transform(self.config, self.config.get('transform', 'resize_train')),
+            maintain=self.config.getint('data', 'maintain'),
             transform_image=transform.get_transform(self.config, self.config.get('transform', 'image_train').split()),
             transform_tensor=transform.get_transform(self.config, self.config.get('transform', 'tensor').split()),
             dir=os.path.join(self.model_dir, 'exception'),

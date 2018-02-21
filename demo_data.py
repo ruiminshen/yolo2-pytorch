@@ -57,9 +57,9 @@ def main():
     except configparser.NoOptionError:
         workers = multiprocessing.cpu_count()
     collate_fn = utils.data.Collate(
+        transform.parse_transform(config, config.get('transform', 'resize_train')),
         utils.train.load_sizes(config),
-        config.getint('data', 'maintain'),
-        resize=transform.parse_transform(config, config.get('transform', 'resize_train')),
+        maintain=config.getint('data', 'maintain'),
         transform_image=transform.get_transform(config, config.get('transform', 'image_train').split()),
     )
     loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=workers, collate_fn=collate_fn)

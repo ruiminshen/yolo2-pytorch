@@ -93,13 +93,13 @@ class Dataset(torch.utils.data.Dataset):
 
 
 class Collate(object):
-    def __init__(self, sizes, maintain=1, resize=transform.resize.label.naive, transform_image=lambda image: image, transform_tensor=None, dir=None):
+    def __init__(self, resize, sizes, maintain=1, transform_image=lambda image: image, transform_tensor=None, dir=None):
         """
         Unify multiple data samples (e.g., resize images into the same size, and padding bounding box labels into the same number) to form a batch.
         :author 申瑞珉 (Ruimin Shen)
+        :param resize: A function to resize the image and labels.
         :param sizes: The image sizes to be randomly choosed.
         :param maintain: How many times a size to be maintained.
-        :param resize: A function to resize the image and labels.
         :param transform_image: A function to transform the resized image.
         :param transform_tensor: A function to standardize a image into a tensor.
         :param dir: The directory to store the exception data.

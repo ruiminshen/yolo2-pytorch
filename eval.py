@@ -200,8 +200,8 @@ class Eval(object):
         except configparser.NoOptionError:
             workers = multiprocessing.cpu_count()
         collate_fn = utils.data.Collate(
+            transform.parse_transform(self.config, self.config.get('transform', 'resize_eval')),
             [size],
-            resize=transform.parse_transform(self.config, self.config.get('transform', 'resize_eval')),
             transform_image=transform.get_transform(self.config, self.config.get('transform', 'image_test').split()),
             transform_tensor=transform.get_transform(self.config, self.config.get('transform', 'tensor').split()),
         )

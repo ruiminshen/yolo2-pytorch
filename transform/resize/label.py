@@ -22,7 +22,7 @@ import numpy as np
 import cv2
 
 
-def naive(image, yx_min, yx_max, height, width):
+def rescale(image, yx_min, yx_max, height, width):
     _height, _width = image.shape[:2]
     scale = np.array([height / _height, width / _width], np.float32)
     image = cv2.resize(image, (width, height))
@@ -31,9 +31,24 @@ def naive(image, yx_min, yx_max, height, width):
     return image, yx_min, yx_max
 
 
-class Naive(object):
+class Rescale(object):
     def __init__(self):
         self.fn = eval(inflection.underscore(type(self).__name__))
+
+    def __call__(self, data, height, width):
+        data['image'], data['yx_min'], data['yx_max'] = self.fn(data['image'], data['yx_min'], data['yx_max'], height, width)
+        return data
+
+
+def resize(config, image, yx_min, yx_max, height, width):
+    fn = eval(config.get('data', inspect.stack()[0][3]))
+    return fn(image, yx_min, yx_max, height, width)
+
+
+class Resize(object):
+    def __init__(self, config):
+        self.config = config
+        self.fn = eval(config.get('data', inflection.underscore(type(self).__name__)))
 
     def __call__(self, data, height, width):
         data['image'], data['yx_min'], data['yx_max'] = self.fn(data['image'], data['yx_min'], data['yx_max'], height, width)
@@ -56,7 +71,7 @@ def random_crop(config, image, yx_min, yx_max, height, width):
     _ymin, _xmin, _ymax, _xmax = tuple(map(int, (_ymin, _xmin, _ymax, _xmax)))
     image = image[_ymin:_ymax, _xmin:_xmax, :]
     yx_min, yx_max = yx_min - _yx_min, yx_max - _yx_min
-    return naive(image, yx_min, yx_max, height, width)
+    return resize(config, image, yx_min, yx_max, height, width)
 
 
 class RandomCrop(object):
