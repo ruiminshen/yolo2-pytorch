@@ -87,7 +87,7 @@ class Detect(object):
         self.cache_dir = utils.get_cache_dir(config)
         self.model_dir = utils.get_model_dir(config)
         self.category = utils.get_category(config, self.cache_dir if os.path.exists(self.cache_dir) else None)
-        self.draw_bbox = utils.visualize.DrawBBox(config, self.category, colors=args.colors, thickness=args.thickness)
+        self.draw_bbox = utils.visualize.DrawBBox(self.category, colors=args.colors, thickness=args.thickness)
         self.anchors = torch.from_numpy(utils.get_anchors(config)).contiguous()
         self.height, self.width = tuple(map(int, config.get('image', 'size').split()))
         self.path, self.step, self.epoch = utils.train.load_model(self.model_dir)

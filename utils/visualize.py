@@ -34,8 +34,7 @@ import utils
 
 
 class DrawBBox(object):
-    def __init__(self, config, category, colors=[], thickness=3, line_type=cv2.LINE_8, shift=0, font_face=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1):
-        self.config = config
+    def __init__(self, category, colors=[], thickness=3, line_type=cv2.LINE_8, shift=0, font_face=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1):
         self.category = category
         if colors:
             self.colors = [tuple(map(lambda c: c * 255, matplotlib.colors.colorConverter.to_rgb(c)[::-1])) for c in colors]
@@ -64,19 +63,18 @@ class DrawBBox(object):
         return image
 
 
-class DrawIou(object):
-    def __init__(self, config, alpha=0.5, cmap=None):
-        self.config = config
+class DrawFeature(object):
+    def __init__(self, alpha=0.5, cmap=None):
         self.alpha = alpha
         self.cm = matplotlib.cm.get_cmap(cmap)
 
-    def __call__(self, image, iou, debug=False):
-        _iou = (iou * self.cm.N).astype(np.int)
-        heatmap = self.cm(_iou)[:, :, :3] * 255
+    def __call__(self, image, feature, debug=False):
+        _feature = (feature * self.cm.N).astype(np.int)
+        heatmap = self.cm(_feature)[:, :, :3] * 255
         heatmap = scipy.misc.imresize(heatmap, image.shape[:2], interp='nearest')
         canvas = (image * (1 - self.alpha) + heatmap * self.alpha).astype(np.uint8)
         if debug:
-            cv2.imshow('iou_max=%f, iou_sum=%f' % (np.max(iou), np.sum(iou)), canvas)
+            cv2.imshow('max=%f, sum=%f' % (np.max(feature), np.sum(feature)), canvas)
             cv2.waitKey(0)
         return canvas
 

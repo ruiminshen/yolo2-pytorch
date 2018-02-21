@@ -90,8 +90,8 @@ class SummaryWorker(multiprocessing.Process):
             self.timer_histogram = lambda: False
         with open(os.path.expanduser(os.path.expandvars(env.config.get('summary_histogram', 'parameters'))), 'r') as f:
             self.histogram_parameters = utils.RegexList([line.rstrip() for line in f])
-        self.draw_bbox = utils.visualize.DrawBBox(env.config, env.category)
-        self.draw_iou = utils.visualize.DrawIou(env.config)
+        self.draw_bbox = utils.visualize.DrawBBox(env.category)
+        self.draw_feature = utils.visualize.DrawFeature()
 
     def __call__(self, name, **kwargs):
         if getattr(self, 'timer_' + name)():
@@ -216,7 +216,7 @@ class SummaryWorker(multiprocessing.Process):
             yx_min, yx_max, cls = ([a[m] for a, m in zip(l, mask)] for l in (yx_min, yx_max, cls))
             canvas = [self.draw_bbox(canvas, yx_min.astype(np.int), yx_max.astype(np.int), cls, colors=colors) for canvas, yx_min, yx_max, cls in zip(np.copy(canvas_share), yx_min, yx_max, cls)]
             iou = [np.reshape(a, [rows, cols]) for a in iou]
-            canvas = [self.draw_iou(_canvas, iou) for _canvas, iou in zip(canvas, iou)]
+            canvas = [self.draw_feature(_canvas, iou) for _canvas, iou in zip(canvas, iou)]
             results.append(canvas)
         return results
 

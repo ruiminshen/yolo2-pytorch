@@ -43,7 +43,7 @@ def main():
         logging.config.dictConfig(yaml.load(f))
     cache_dir = utils.get_cache_dir(config)
     category = utils.get_category(config, cache_dir)
-    draw_bbox = utils.visualize.DrawBBox(config, category)
+    draw_bbox = utils.visualize.DrawBBox(category)
     batch_size = args.rows * args.cols
     paths = [os.path.join(cache_dir, phase + '.pkl') for phase in args.phase]
     dataset = utils.data.Dataset(

@@ -169,7 +169,7 @@ class Eval(object):
         self.model_dir = utils.get_model_dir(config)
         self.cache_dir = utils.get_cache_dir(config)
         self.category = utils.get_category(config, self.cache_dir)
-        self.draw_bbox = utils.visualize.DrawBBox(config, self.category)
+        self.draw_bbox = utils.visualize.DrawBBox(self.category)
         self.loader = self.get_loader()
         self.anchors = torch.from_numpy(utils.get_anchors(config)).contiguous()
         self.path, self.step, self.epoch = utils.train.load_model(self.model_dir)
