@@ -294,7 +294,10 @@ class Train(object):
         except ValueError:
             step, epoch = 0, 0
             config_channels = model.ConfigChannels(self.config)
-        return step, epoch, config_channels
+        dnn = utils.parse_attr(self.config.get('model', 'dnn'))(config_channels, self.anchors, len(self.category))
+        if config_channels.state_dict is not None:
+            dnn.load_state_dict(config_channels.state_dict)
+        return step, epoch, dnn
 
     def finetune(self, model, path):
         if os.path.isdir(path):
@@ -341,12 +344,9 @@ class Train(object):
             try:
                 loader = self.get_loader()
                 logging.info('num_workers=%d' % loader.num_workers)
-                step, epoch, config_channels = self.load()
-                dnn = utils.parse_attr(self.config.get('model', 'dnn'))(config_channels, self.anchors, len(self.category))
+                step, epoch, dnn = self.load()
                 inference = model.Inference(self.config, dnn, self.anchors)
                 logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in inference.state_dict().values())))
-                if config_channels.state_dict is not None:
-                    dnn.load_state_dict(config_channels.state_dict)
                 if self.args.finetune:
                     path = os.path.expanduser(os.path.expandvars(self.args.finetune))
                     logging.info('finetune from ' + path)
