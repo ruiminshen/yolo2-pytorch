@@ -116,8 +116,8 @@ class SummaryWorker(multiprocessing.Process):
     def copy_scalar(self, **kwargs):
         step, loss_total, loss, loss_hparam = (kwargs[key] for key in 'step, loss_total, loss, loss_hparam'.split(', '))
         loss_total = loss_total.data.clone().cpu().numpy()
-        loss = {key: loss[key].data.clone().cpu().numpy() for key in loss}
-        loss_hparam = {key: loss_hparam[key].data.clone().cpu().numpy() for key in loss_hparam}
+        loss = {key: l.data.clone().cpu().numpy() for key, l in loss.items()}
+        loss_hparam = {key: l.data.clone().cpu().numpy() for key, l in loss_hparam.items()}
         return dict(
             step=step,
             loss_total=loss_total,
@@ -126,10 +126,10 @@ class SummaryWorker(multiprocessing.Process):
 
     def summary_scalar(self, **kwargs):
         step, loss_total, loss, loss_hparam = (kwargs[key] for key in 'step, loss_total, loss, loss_hparam'.split(', '))
-        for key in loss:
-            self.writer.add_scalar('loss/' + key, loss[key][0], step)
+        for key, l in loss.items():
+            self.writer.add_scalar('loss/' + key, l[0], step)
         if self.config.getboolean('summary_scalar', 'loss_hparam'):
-            self.writer.add_scalars('loss_hparam', {key: loss_hparam[key][0] for key in loss_hparam}, step)
+            self.writer.add_scalars('loss_hparam', {key: l[0] for key, l in loss_hparam.items()}, step)
         self.writer.add_scalar('loss_total', loss_total[0], step)
 
     def copy_image(self, **kwargs):
