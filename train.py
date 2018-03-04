@@ -342,8 +342,6 @@ class Train(object):
     def __call__(self):
         with filelock.FileLock(os.path.join(self.model_dir, 'lock'), 0):
             try:
-                loader = self.get_loader()
-                logging.info('num_workers=%d' % loader.num_workers)
                 step, epoch, dnn = self.load()
                 inference = model.Inference(self.config, dnn, self.anchors)
                 logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in inference.state_dict().values())))
@@ -358,6 +356,8 @@ class Train(object):
                     scheduler = eval(self.config.get('train', 'scheduler'))(optimizer)
                 except configparser.NoOptionError:
                     scheduler = None
+                loader = self.get_loader()
+                logging.info('num_workers=%d' % loader.num_workers)
                 for epoch in range(0 if epoch is None else epoch, self.args.epoch):
                     if scheduler is not None:
                         scheduler.step(epoch)

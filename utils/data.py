@@ -20,12 +20,10 @@ import pickle
 import random
 import copy
 
-import cv2
 import numpy as np
-import sklearn.preprocessing
 import torch.utils.data
-
-import transform.resize.label
+import sklearn.preprocessing
+import cv2
 
 
 def padding_labels(data, dim, labels='yx_min, yx_max, cls, difficult'.split(', ')):
