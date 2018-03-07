@@ -20,6 +20,7 @@ import argparse
 import configparser
 import logging
 import logging.config
+import collections
 import multiprocessing
 import os
 import shutil
@@ -223,7 +224,6 @@ class SummaryWorker(multiprocessing.Process):
     def copy_histogram(self, **kwargs):
         return {key: kwargs[key].data.clone().cpu().numpy() if torch.is_tensor(kwargs[key]) else kwargs[key] for key in 'step, dnn'.split(', ')}
 
-
     def summary_histogram(self, **kwargs):
         step, dnn = (kwargs[key] for key in 'step, dnn'.split(', '))
         for name, param in dnn.named_parameters():
@@ -397,19 +397,16 @@ class Train(object):
         if np.isnan(loss_total.data.cpu()[0]):
             dump_dir = os.path.join(self.model_dir, str(step))
             os.makedirs(dump_dir, exist_ok=True)
-            torch.save(kwargs['dnn'].state_dict(), os.path.join(dump_dir, 'model.pth'))
+            torch.save(collections.OrderedDict([(key, var.cpu()) for key, var in kwargs['dnn'].state_dict().items()]), os.path.join(dump_dir, 'model.pth'))
             torch.save(data, os.path.join(dump_dir, 'data.pth'))
-            for key in loss:
-                logging.warning('%s=%f' % (key, loss[key].data.cpu()[0]))
+            for key, l in loss.items():
+                logging.warning('%s=%f' % (key, l.data.cpu()[0]))
             raise OverflowError('NaN loss detected, dump runtime information into ' + dump_dir)
 
     def save(self, **kwargs):
         step, epoch = (kwargs[key] for key in 'step, epoch'.split(', '))
         self.check_nan(**kwargs)
-        state_dict = kwargs['dnn'].state_dict()
-        for key in state_dict:
-            state_dict[key] = state_dict[key].cpu()
-        self.saver(state_dict, step, epoch)
+        self.saver(collections.OrderedDict([(key, var.cpu()) for key, var in kwargs['dnn'].state_dict().items()]), step, epoch)
 
     def eval(self, **kwargs):
         step, inference = (kwargs[key] for key in 'step, inference'.split(', '))
