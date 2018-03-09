@@ -153,15 +153,12 @@ class Detect(object):
             image_bgr = image_bgr[self.crop_ymin:self.crop_ymax, self.crop_xmin:self.crop_xmax]
         return image_bgr
 
-    def conv_tensor(self, image_bgr):
+    def __call__(self):
+        image_bgr = self.get_image()
         image_resized = self.resize(image_bgr, self.height, self.width)
         image = self.transform_image(image_resized)
         tensor = self.transform_tensor(image)
-        return utils.ensure_device(tensor.unsqueeze(0))
-
-    def __call__(self):
-        image_bgr = self.get_image()
-        tensor = self.conv_tensor(image_bgr)
+        tensor = utils.ensure_device(tensor.unsqueeze(0))
         pred = pybenchmark.profile('inference')(model._inference)(self.inference, torch.autograd.Variable(tensor, volatile=True))
         rows, cols = pred['feature'].size()[-2:]
         iou = pred['iou'].data.contiguous().view(-1)
@@ -220,7 +217,7 @@ def make_args():
     parser.add_argument('--crop', nargs='+', type=float, default=[], help='ymin ymax xmin xmax')
     parser.add_argument('--pause', action='store_true')
     parser.add_argument('--fourcc', default='XVID', help='4-character code of codec used to compress the frames, such as XVID, MJPG')
-    parser.add_argument('--thickness', default=3)
+    parser.add_argument('--thickness', default=3, type=int)
     parser.add_argument('--colors', nargs='+', default=[])
     parser.add_argument('--logging', default='logging.yml', help='logging config')
     return parser.parse_args()

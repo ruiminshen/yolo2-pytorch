@@ -26,7 +26,8 @@ def rescale(image, height, width):
 
 class Rescale(object):
     def __init__(self):
-        self.fn = eval(inflection.underscore(type(self).__name__))
+        name = inflection.underscore(type(self).__name__)
+        self.fn = eval(name)
 
     def __call__(self, image, height, width):
         return self.fn(image, height, width)
@@ -47,7 +48,8 @@ def fixed(image, height, width):
 
 class Fixed(object):
     def __init__(self):
-        self.fn = eval(inflection.underscore(type(self).__name__))
+        name = inflection.underscore(type(self).__name__)
+        self.fn = eval(name)
 
     def __call__(self, image, height, width):
         return self.fn(image, height, width)
@@ -55,7 +57,8 @@ class Fixed(object):
 
 class Resize(object):
     def __init__(self, config):
-        self.fn = eval(config.get('data', inflection.underscore(type(self).__name__)))
+        name = config.get('data', inflection.underscore(type(self).__name__))
+        self.fn = eval(name)
 
     def __call__(self, image, height, width):
         return self.fn(image, height, width)
