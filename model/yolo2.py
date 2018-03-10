@@ -66,10 +66,10 @@ class Conv2d(nn.Module):
 
 
 class Darknet(nn.Module):
-    def __init__(self, config_channels, anchors, num_cls, stride=2):
+    def __init__(self, config_channels, anchors, num_cls, stride=2, ratio=1):
         nn.Module.__init__(self)
         self.stride = stride
-        channels = 32
+        channels = int(32 * ratio)
         layers = []
 
         bn = config_channels.config.getboolean('batch_norm', 'enable')
@@ -104,15 +104,17 @@ class Darknet(nn.Module):
             layers.append(Conv2d(config_channels.channels, config_channels(channels, 'layers2.%d.conv.weight' % len(layers)), 3, bn=bn, padding=True))
         self.layers2 = nn.Sequential(*layers)
 
-        self.passthrough = Conv2d(self.layers1[-1].conv.weight.size(0), config_channels(64, 'passthrough.conv.weight'), 1, bn=bn)
+        self.passthrough = Conv2d(self.layers1[-1].conv.weight.size(0), config_channels(int(64 * ratio), 'passthrough.conv.weight'), 1, bn=bn)
 
         # layers3
         layers = []
-        layers.append(Conv2d(self.passthrough.conv.weight.size(0) * self.stride * self.stride + self.layers2[-1].conv.weight.size(0), config_channels(1024, 'layers3.%d.conv.weight' % len(layers)), 3, bn=bn, padding=True))
+        layers.append(Conv2d(self.passthrough.conv.weight.size(0) * self.stride * self.stride + self.layers2[-1].conv.weight.size(0), config_channels(int(1024 * ratio), 'layers3.%d.conv.weight' % len(layers)), 3, bn=bn, padding=True))
         layers.append(Conv2d(config_channels.channels, model.output_channels(len(anchors), num_cls), 1, bn=False, act=False))
         self.layers3 = nn.Sequential(*layers)
 
-        # init
+        self.init()
+
+    def init(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 m.weight = nn.init.kaiming_normal(m.weight)
@@ -136,9 +138,8 @@ class Darknet(nn.Module):
 
 
 class Tiny(nn.Module):
-    def __init__(self, config_channels, anchors, num_cls):
+    def __init__(self, config_channels, anchors, num_cls, channels=16):
         nn.Module.__init__(self)
-        channels = 16
         layers = []
 
         bn = config_channels.config.getboolean('batch_norm', 'enable')
@@ -155,7 +156,9 @@ class Tiny(nn.Module):
         layers.append(Conv2d(config_channels.channels, model.output_channels(len(anchors), num_cls), 1, bn=False, act=False))
         self.layers = nn.Sequential(*layers)
 
-        # init
+        self.init()
+
+    def init(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 m.weight = nn.init.xavier_normal(m.weight)
