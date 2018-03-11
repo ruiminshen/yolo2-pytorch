@@ -124,7 +124,7 @@ class Inception_A(nn.Module):
         config_channels.channels = channels
         branch = []
         branch.append(nn.AvgPool2d(3, stride=1, padding=1, count_include_pad=False))
-        branch.append(Conv2d(config_channels.channels, config_channels(int(96 * ratio), '%s.branch3.%d.conv.weight' % (prefix, len(branch))), kernel_size=1, stride=1))
+        branch.append(Conv2d(config_channels.channels, config_channels(int(96 * ratio), '%s.branch3.%d.conv.weight' % (prefix, len(branch))), kernel_size=1, stride=1, bn=bn))
         self.branch3 = nn.Sequential(*branch)
         # output
         config_channels.channels = self.branch0.conv.weight.size(0) + self.branch1[-1].conv.weight.size(0) + self.branch2[-1].conv.weight.size(0) + self.branch3[-1].conv.weight.size(0)
