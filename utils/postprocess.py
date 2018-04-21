@@ -34,8 +34,8 @@ def nms(score, yx_min, yx_max, overlap=0.5, limit=200):
     keep = []
     if score.numel() == 0:
         return keep
-    s, index = score.sort(0)
-    index = index[-limit:]
+    s, index = score.sort(descending=True)
+    index = index[:limit]
     while index.numel() > 0:
         i = index[-1]
         keep.append(i)
