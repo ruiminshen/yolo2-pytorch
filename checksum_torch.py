@@ -41,6 +41,7 @@ def main():
         utils.modify_config(config, cmd)
     with open(os.path.expanduser(os.path.expandvars(args.logging)), 'r') as f:
         logging.config.dictConfig(yaml.load(f))
+    torch.manual_seed(args.seed)
     cache_dir = utils.get_cache_dir(config)
     model_dir = utils.get_model_dir(config)
     category = utils.get_category(config, cache_dir if os.path.exists(cache_dir) else None)
@@ -51,22 +52,13 @@ def main():
     dnn = utils.parse_attr(config.get('model', 'dnn'))(model.ConfigChannels(config, state_dict), anchors, len(category))
     dnn.load_state_dict(state_dict)
     height, width = tuple(map(int, config.get('image', 'size').split()))
-    resize = transform.parse_transform(config, config.get('transform', 'resize_test'))
-    transform_image = transform.get_transform(config, config.get('transform', 'image_test').split())
-    transform_tensor = transform.get_transform(config, config.get('transform', 'tensor').split())
-    # load image
-    image_bgr = cv2.imread('image.jpg')
-    image_resized = resize(image_bgr, height, width)
-    image = transform_image(image_resized)
-    tensor = transform_tensor(image).unsqueeze(0)
+    tensor = torch.randn(1, 3, height, width)
     # Checksum
     for key, var in dnn.state_dict().items():
         a = var.cpu().numpy()
         print('\t'.join(map(str, [key, a.shape, utils.abs_mean(a), hashlib.md5(a.tostring()).hexdigest()])))
     output = dnn(torch.autograd.Variable(tensor, volatile=True)).data
     for key, a in [
-        ('image_bgr', image_bgr),
-        ('image_resized', image_resized),
         ('tensor', tensor.cpu().numpy()),
         ('output', output.cpu().numpy()),
     ]:
@@ -78,6 +70,7 @@ def make_args():
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
     parser.add_argument('--logging', default='logging.yml', help='logging config')
+    parser.add_argument('-s', '--seed', default=0, type=int, help='a seed to create a random image tensor')
     return parser.parse_args()
 
 
