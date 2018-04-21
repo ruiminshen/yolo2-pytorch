@@ -99,9 +99,7 @@ class Detect(object):
         if torch.cuda.is_available():
             self.inference.cuda()
         logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in self.inference.state_dict().values())))
-        self.create_cap()
-        self.create_cap_size()
-        self.writer = self.create_writer()
+        self.cap = self.create_cap()
         self.keys = set(args.keys)
         self.resize = transform.parse_transform(config, config.get('transform', 'resize_test'))
         self.transform_image = transform.get_transform(config, config.get('transform', 'image_test').split())
@@ -121,31 +119,18 @@ class Detect(object):
         except ValueError:
             cap = os.path.expanduser(os.path.expandvars(self.args.input))
             assert os.path.exists(cap)
-        self.cap = cv2.VideoCapture(cap)
+        return cv2.VideoCapture(cap)
 
-    def create_cap_size(self):
-        cap_height, cap_width = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        if self.args.crop:
-            crop_ymin, crop_ymax, crop_xmin, crop_xmax = self.args.crop
-            if crop_ymin <= 1 and crop_ymax <= 1 and crop_xmin <= 1 and crop_xmax <= 1:
-                crop_ymin, crop_ymax = crop_ymin * cap_height, crop_ymax * cap_height
-                crop_xmin, crop_xmax = crop_xmin * cap_width, crop_xmax * cap_width
-            crop_ymin, crop_ymax, crop_xmin, crop_xmax = int(crop_ymin), int(crop_ymax), int(crop_xmin), int(crop_xmax)
-            cap_height, cap_width = crop_ymax - crop_ymin, crop_xmax - crop_xmin
-            self.crop_ymin, self.crop_ymax, self.crop_xmin, self.crop_xmax = crop_ymin, crop_ymax, crop_xmin, crop_xmax
-        logging.info('cap_height, cap_width=%d, %d' % (cap_height, cap_width))
-        self.cap_height, self.cap_width = cap_height, cap_width
-
-    def create_writer(self):
+    def create_writer(self, height, width):
         fps = self.cap.get(cv2.CAP_PROP_FPS)
         logging.info('cap fps=%f' % fps)
-        if self.args.output:
-            path = os.path.expanduser(os.path.expandvars(self.args.output))
-            if self.args.fourcc:
-                fourcc = cv2.VideoWriter_fourcc(*self.args.fourcc.upper())
-            else:
-                fourcc = int(self.cap.get(cv2.CAP_PROP_FOURCC))
-            return cv2.VideoWriter(path, fourcc, fps, (self.cap_width, self.cap_height))
+        path = os.path.expanduser(os.path.expandvars(self.args.output))
+        if self.args.fourcc:
+            fourcc = cv2.VideoWriter_fourcc(*self.args.fourcc.upper())
+        else:
+            fourcc = int(self.cap.get(cv2.CAP_PROP_FOURCC))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return cv2.VideoWriter(path, fourcc, fps, (width, height))
 
     def get_image(self):
         ret, image_bgr = self.cap.read()
@@ -177,6 +162,8 @@ class Detect(object):
             yx_min, yx_max = ((t * scale).cpu().numpy().astype(np.int) for t in (yx_min, yx_max))
             image_result = self.draw_bbox(image_result, yx_min, yx_max, cls)
         if self.args.output:
+            if not hasattr(self, 'writer'):
+                self.writer = self.create_writer(*image_result.shape[:2])
             self.writer.write(image_result)
         else:
             cv2.imshow('detection', image_result)
@@ -210,7 +197,7 @@ def make_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', nargs='+', default=['config.ini'], help='config file')
     parser.add_argument('-m', '--modify', nargs='+', default=[], help='modify config')
-    parser.add_argument('-i', '--input', default=0)
+    parser.add_argument('-i', '--input', default=-1)
     parser.add_argument('-k', '--keys', nargs='+', type=int, default=[ord(' ')], help='keys to dump images')
     parser.add_argument('-o', '--output', help='output video file')
     parser.add_argument('-f', '--format', default='%Y-%m-%d_%H-%M-%S.jpg', help='dump file name format')
