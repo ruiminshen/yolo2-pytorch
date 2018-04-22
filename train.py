@@ -104,6 +104,9 @@ class SummaryWorker(multiprocessing.Process):
 
     def run(self):
         self.writer = SummaryWriter(os.path.join(self.env.model_dir, self.env.args.run))
+        height, width = tuple(map(int, self.config.get('image', 'size').split()))
+        tensor = torch.randn(1, 3, height, width)
+        self.writer.add_graph(self.env.dnn, (torch.autograd.Variable(tensor),))
         while True:
             name, kwargs = self.queue.get()
             if name is None:
@@ -222,13 +225,16 @@ class SummaryWorker(multiprocessing.Process):
         return results
 
     def copy_histogram(self, **kwargs):
-        return {key: kwargs[key].data.clone().cpu().numpy() if torch.is_tensor(kwargs[key]) else kwargs[key] for key in 'step, dnn'.split(', ')}
+        return {
+            'step': kwargs['step'],
+            'dnn': self.env.dnn.state_dict(),
+        }
 
     def summary_histogram(self, **kwargs):
         step, dnn = (kwargs[key] for key in 'step, dnn'.split(', '))
-        for name, param in dnn.named_parameters():
+        for name, var in dnn.items():
             if self.histogram_parameters(name):
-                self.writer.add_histogram(name, param, step)
+                self.writer.add_histogram(name, var, step)
 
 
 class Train(object):
@@ -247,6 +253,18 @@ class Train(object):
         os.makedirs(self.model_dir, exist_ok=True)
         with open(self.model_dir + '.ini', 'w') as f:
             config.write(f)
+
+        self.step, self.epoch, self.dnn = self.load()
+        self.inference = model.Inference(self.config, self.dnn, self.anchors)
+        logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in self.inference.state_dict().values())))
+        if self.args.finetune:
+            path = os.path.expanduser(os.path.expandvars(self.args.finetune))
+            logging.info('finetune from ' + path)
+            self.finetune(self.dnn, path)
+        self.inference = ensure_model(self.inference)
+        self.inference.train()
+        self.optimizer = eval(self.config.get('train', 'optimizer'))(filter(lambda p: p.requires_grad, self.inference.parameters()), self.args.learning_rate)
+
         self.saver = utils.train.Saver(self.model_dir, config.getint('save', 'keep'))
         self.timer_save = utils.train.Timer(config.getfloat('save', 'secs'), False)
         try:
@@ -313,26 +331,26 @@ class Train(object):
                 logging.warning('%s not in finetune file %s' % (key, path))
         model.load_state_dict(state_dict)
 
-    def step(self, inference, optimizer, data):
+    def iterate(self, data):
         for key in data:
             t = data[key]
             if torch.is_tensor(t):
                 data[key] = utils.ensure_device(t)
         tensor = torch.autograd.Variable(data['tensor'])
-        pred = pybenchmark.profile('inference')(model._inference)(inference, tensor)
+        pred = pybenchmark.profile('inference')(model._inference)(self.inference, tensor)
         height, width = data['image'].size()[1:3]
         rows, cols = pred['feature'].size()[-2:]
         loss, debug = pybenchmark.profile('loss')(model.loss)(self.anchors, norm_data(data, height, width, rows, cols), pred, self.config.getfloat('model', 'threshold'))
         loss_hparam = {key: loss[key] * self.config.getfloat('hparam', key) for key in loss}
         loss_total = sum(loss_hparam.values())
-        optimizer.zero_grad()
+        self.optimizer.zero_grad()
         loss_total.backward()
         try:
             clip = self.config.getfloat('train', 'clip')
-            nn.utils.clip_grad_norm(inference.parameters(), clip)
+            nn.utils.clip_grad_norm(self.inference.parameters(), clip)
         except configparser.NoOptionError:
             pass
-        optimizer.step()
+        self.optimizer.step()
         return dict(
             height=height, width=width, rows=rows, cols=cols,
             data=data, pred=pred, debug=debug,
@@ -342,33 +360,21 @@ class Train(object):
     def __call__(self):
         with filelock.FileLock(os.path.join(self.model_dir, 'lock'), 0):
             try:
-                step, epoch, dnn = self.load()
-                inference = model.Inference(self.config, dnn, self.anchors)
-                logging.info(humanize.naturalsize(sum(var.cpu().numpy().nbytes for var in inference.state_dict().values())))
-                if self.args.finetune:
-                    path = os.path.expanduser(os.path.expandvars(self.args.finetune))
-                    logging.info('finetune from ' + path)
-                    self.finetune(dnn, path)
-                inference = ensure_model(inference)
-                inference.train()
-                optimizer = eval(self.config.get('train', 'optimizer'))(filter(lambda p: p.requires_grad, inference.parameters()), self.args.learning_rate)
                 try:
-                    scheduler = eval(self.config.get('train', 'scheduler'))(optimizer)
+                    scheduler = eval(self.config.get('train', 'scheduler'))(self.optimizer)
                 except configparser.NoOptionError:
                     scheduler = None
                 loader = self.get_loader()
                 logging.info('num_workers=%d' % loader.num_workers)
-                for epoch in range(0 if epoch is None else epoch, self.args.epoch):
+                step = self.step
+                for epoch in range(0 if self.epoch is None else self.epoch, self.args.epoch):
                     if scheduler is not None:
                         scheduler.step(epoch)
                         logging.info('epoch=%d, lr=%s' % (epoch, str(scheduler.get_lr())))
                     for data in loader if self.args.quiet else tqdm.tqdm(loader, desc='epoch=%d/%d' % (epoch, self.args.epoch)):
-                        kwargs = self.step(inference, optimizer, data)
+                        kwargs = self.iterate(data)
                         step += 1
-                        kwargs = {**kwargs, **dict(
-                            dnn=dnn, inference=inference, optimizer=optimizer,
-                            step=step, epoch=epoch,
-                        )}
+                        kwargs = {**kwargs, **dict(step=step, epoch=epoch)}
                         self.summary_worker('scalar', **kwargs)
                         self.summary_worker('image', **kwargs)
                         self.summary_worker('histogram', **kwargs)
@@ -397,7 +403,7 @@ class Train(object):
         if np.isnan(loss_total.data.cpu()[0]):
             dump_dir = os.path.join(self.model_dir, str(step))
             os.makedirs(dump_dir, exist_ok=True)
-            torch.save(collections.OrderedDict([(key, var.cpu()) for key, var in kwargs['dnn'].state_dict().items()]), os.path.join(dump_dir, 'model.pth'))
+            torch.save(collections.OrderedDict([(key, var.cpu()) for key, var in self.dnn.state_dict().items()]), os.path.join(dump_dir, 'model.pth'))
             torch.save(data, os.path.join(dump_dir, 'data.pth'))
             for key, l in loss.items():
                 logging.warning('%s=%f' % (key, l.data.cpu()[0]))
@@ -406,7 +412,7 @@ class Train(object):
     def save(self, **kwargs):
         step, epoch = (kwargs[key] for key in 'step, epoch'.split(', '))
         self.check_nan(**kwargs)
-        self.saver(collections.OrderedDict([(key, var.cpu()) for key, var in kwargs['dnn'].state_dict().items()]), step, epoch)
+        self.saver(collections.OrderedDict([(key, var.cpu()) for key, var in self.dnn.state_dict().items()]), step, epoch)
 
     def eval(self, **kwargs):
         step, inference = (kwargs[key] for key in 'step, inference'.split(', '))
