@@ -227,12 +227,12 @@ class SummaryWorker(multiprocessing.Process):
     def copy_histogram(self, **kwargs):
         return {
             'step': kwargs['step'],
-            'dnn': self.env.dnn.state_dict(),
+            'state_dict': self.env.dnn.state_dict(),
         }
 
     def summary_histogram(self, **kwargs):
-        step, dnn = (kwargs[key] for key in 'step, dnn'.split(', '))
-        for name, var in dnn.items():
+        step, state_dict = (kwargs[key] for key in 'step, state_dict'.split(', '))
+        for name, var in state_dict.items():
             if self.histogram_parameters(name):
                 self.writer.add_histogram(name, var, step)
 
