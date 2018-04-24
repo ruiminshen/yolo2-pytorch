@@ -21,7 +21,6 @@ import inspect
 
 import numpy as np
 import torch
-import scipy.misc
 import matplotlib
 import matplotlib.cm
 import matplotlib.colors
@@ -71,7 +70,7 @@ class DrawFeature(object):
     def __call__(self, image, feature, debug=False):
         _feature = (feature * self.cm.N).astype(np.int)
         heatmap = self.cm(_feature)[:, :, :3] * 255
-        heatmap = scipy.misc.imresize(heatmap, image.shape[:2], interp='nearest')
+        heatmap = cv2.resize(heatmap, image.shape[1::-1], interpolation=cv2.INTER_NEAREST)
         canvas = (image * (1 - self.alpha) + heatmap * self.alpha).astype(np.uint8)
         if debug:
             cv2.imshow('max=%f, sum=%f' % (np.max(feature), np.sum(feature)), canvas)
