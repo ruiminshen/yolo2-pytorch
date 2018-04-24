@@ -67,7 +67,7 @@ def random_rotate(config, image, yx_min, yx_max):
     p2[:, 0] = yx_min[:, 0]
     points = np.concatenate([yx_min, yx_max, p1, p2], 0)
     rotator = Rotator(height / 2, width / 2, height, width, angle)
-    image = rotator(image)
+    image = rotator(image, fill=0)
     points = rotator.rotate_points(points)
     bbox_points = np.reshape(points, [4, -1, 2])
     yx_min = np.apply_along_axis(lambda points: np.min(points, 0), 0, bbox_points)

@@ -106,7 +106,8 @@ class SummaryWorker(multiprocessing.Process):
         self.writer = SummaryWriter(os.path.join(self.env.model_dir, self.env.args.run))
         height, width = tuple(map(int, self.config.get('image', 'size').split()))
         tensor = torch.randn(1, 3, height, width)
-        self.writer.add_graph(self.env.dnn, (torch.autograd.Variable(tensor),))
+        step, epoch, dnn = self.env.load()
+        self.writer.add_graph(dnn, (torch.autograd.Variable(tensor),))
         while True:
             name, kwargs = self.queue.get()
             if name is None:
