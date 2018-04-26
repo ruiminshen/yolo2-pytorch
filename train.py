@@ -104,10 +104,13 @@ class SummaryWorker(multiprocessing.Process):
 
     def run(self):
         self.writer = SummaryWriter(os.path.join(self.env.model_dir, self.env.args.run))
-        height, width = tuple(map(int, self.config.get('image', 'size').split()))
-        tensor = torch.randn(1, 3, height, width)
-        step, epoch, dnn = self.env.load()
-        self.writer.add_graph(dnn, (torch.autograd.Variable(tensor),))
+        try:
+            height, width = tuple(map(int, self.config.get('image', 'size').split()))
+            tensor = torch.randn(1, 3, height, width)
+            step, epoch, dnn = self.env.load()
+            self.writer.add_graph(dnn, (torch.autograd.Variable(tensor),))
+        except:
+            traceback.print_exc()
         while True:
             name, kwargs = self.queue.get()
             if name is None:
