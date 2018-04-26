@@ -34,14 +34,14 @@ def nms(score, yx_min, yx_max, overlap=0.5, limit=200):
     keep = []
     if score.numel() == 0:
         return keep
-    s, index = score.sort(descending=True)
+    _, index = score.sort(descending=True)
     index = index[:limit]
     while index.numel() > 0:
-        i = index[-1]
+        i = index[0]
         keep.append(i)
         if index.size(0) == 1:
             break
-        index = index[:-1]
+        index = index[1:]
         yx_min1, yx_max1 = (torch.unsqueeze(t[i], 0) for t in (yx_min, yx_max))
         yx_min2, yx_max2 = (torch.index_select(t, 0, index) for t in (yx_min, yx_max))
         iou = utils.iou.torch.iou_matrix(yx_min1, yx_max1, yx_min2, yx_max2)[0]
