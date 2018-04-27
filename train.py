@@ -419,10 +419,9 @@ class Train(object):
         self.saver(collections.OrderedDict([(key, var.cpu()) for key, var in self.dnn.state_dict().items()]), step, epoch)
 
     def eval(self, **kwargs):
-        step, inference = (kwargs[key] for key in 'step, inference'.split(', '))
         logging.info('evaluating')
         if torch.cuda.is_available():
-            inference.cpu()
+            self.inference.cpu()
         try:
             e = _eval.Eval(self.args, self.config)
             cls_ap = e()
@@ -430,7 +429,7 @@ class Train(object):
         except:
             traceback.print_exc()
         if torch.cuda.is_available():
-            inference.cuda()
+            self.inference.cuda()
 
     def backup_best(self, cls_ap, path):
         try:
