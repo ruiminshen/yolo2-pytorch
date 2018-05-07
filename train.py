@@ -313,7 +313,7 @@ class Train(object):
             path, step, epoch = utils.train.load_model(self.model_dir)
             state_dict = torch.load(path, map_location=lambda storage, loc: storage)
             config_channels = model.ConfigChannels(self.config, state_dict)
-        except ValueError:
+        except (FileNotFoundError, ValueError):
             step, epoch = 0, 0
             config_channels = model.ConfigChannels(self.config)
         dnn = utils.parse_attr(self.config.get('model', 'dnn'))(config_channels, self.anchors, len(self.category))
